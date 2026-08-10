@@ -13,6 +13,8 @@
 **Próxima etapa:** ETAPA 08 — Properties Panel
 **Última atualização:** 2026-08-10
 
+**Deploy mais recente:** Preview — 2026-08-10
+
 ---
 
 ## ETAPA 01 — Project Setup
@@ -500,5 +502,46 @@ Criar sistema funcional de texto com adicao, edicao inline e sincronizacao com Z
 - `FabricText` com `editable: true` usa o TextEditingManager interno do Fabric.js v6
 - Edicao inline funciona com duplo-clique; sai com click fora ou Enter
 - Propriedades de fonte/familia/cor ainda nao tem UI dedicada (ETAPA 08 — Properties Panel)
+
+---
+
+## CHECKPOINT DEPLOY — ETAPA 07
+
+### Status: CONCLUIDO
+
+### Tipo
+Vercel Preview Deployment (primeiro deploy do projeto)
+
+### URL
+- Preview: `https://editor-fotos-ov1v316zg-viniciusflas-projects.vercel.app`
+- Aliased: `https://editor-fotos-jet.vercel.app`
+
+### Vercel Project
+`viniciusflas-projects/editor-fotos`
+
+### Validacoes pre-deploy
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Fabric.js / Next.js compatibilidade
+- Todos os componentes que usam Fabric.js possuem `'use client'`
+- `page.tsx` (server component) nao importa fabric diretamente
+- Sem erros de SSR/hydration
+- Lifecycle de canvas com `dispose()` no cleanup
+- Nenhum `any`, `@ts-ignore` ou `eslint-disable` adicionado para deploy
+
+### Correcoes tecnicas
+- Nenhuma. Projeto passou em todas as validacoes sem alteracoes.
+
+### Branch
+`master` (commit `b7e083d` — ETAPA 07 — Text Elements)
+
+---
+
+
 
 ---
