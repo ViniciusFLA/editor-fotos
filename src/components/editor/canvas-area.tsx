@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { FabricImage, FabricText } from 'fabric';
+import { FabricImage, FabricText, FabricObject } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
@@ -220,6 +220,35 @@ export function CanvasArea() {
     syncElementToFabric(selectedElement, fabricObj);
     canvas.requestRenderAll();
   }, [selectedElement, canvasReady, canvasInstanceRef, syncingFromCanvasRef]);
+
+  const elementOrderKey = useEditorStore(
+    (s) => s.elements.map((el) => el.id).join(',') + '|' + s.elements.map((el) => el.zIndex).join(','),
+  );
+
+  useEffect(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady) return;
+
+    const store = useEditorStore.getState();
+    const sorted = [...store.elements].sort((a, b) => a.zIndex - b.zIndex);
+
+    const objectPositions = new Map<FabricObject, number>();
+    sorted.forEach((el, i) => {
+      const obj = findFabricObjectById(canvas, el.id);
+      if (obj) {
+        objectPositions.set(obj, i);
+      }
+    });
+
+    if (objectPositions.size === 0) return;
+
+    objectPositions.forEach((targetIdx, obj) => {
+      canvas.remove(obj);
+      canvas.insertAt(targetIdx, obj);
+    });
+
+    canvas.requestRenderAll();
+  }, [elementOrderKey, canvasReady, canvasInstanceRef]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

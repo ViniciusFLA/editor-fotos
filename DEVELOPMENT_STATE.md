@@ -11,8 +11,9 @@
 **ETAPA 07 — Text Elements** — CONCLUIDA
 **ETAPA 08 — Properties Panel** — CONCLUIDA
 **ETAPA 09 — Layers Panel** — CONCLUIDA
+**ETAPA 10 — Layer Reordering** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 10 — Layer Reordering
+**Proxima etapa:** CHECKPOINT A — Revisao Geral (FASE A completa)
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview — 2026-08-10
@@ -670,5 +671,68 @@ Criar painel funcional de camadas com lista de elementos, selecao sincronizada n
 - `LayersPanel` usa `w-48` (192px) — mesma largura que o RightPanel para consistencia
 - Ordenacao por `zIndex` decrescente segue convencao Photoshop/Figma (camada superior = primeiro na lista)
 - Visibilidade e lock syncam para Fabric via efeito de propriedades existente na canvas-area (ETAPA 08)
+
+---
+
+## ETAPA 10 — Layer Reordering
+
+### Status: CONCLUIDA
+
+### Objetivo
+Permitir controlar a ordem visual das camadas via drag-and-drop e botoes de reordenacao, com sincronizacao entre zIndex (store) e ordem de objetos (Fabric canvas).
+
+### Implementado
+
+- **Store actions de reordenacao** (`editor-store.ts`):
+  - `bringForward(id)` — troca zIndex com elemento acima (swap de indices)
+  - `sendBackward(id)` — troca zIndex com elemento abaixo
+  - `bringToFront(id)` — zIndex = max + 1
+  - `sendToBack(id)` — zIndex = min - 1
+  - `reorderElementsByZIndex(orderedIds)` — recalcula todos zIndices baseado na nova ordem
+  - `reorderZIndices` (helper) — mapeia posicao no array para zIndex (posicao 0 = zIndex n-1, ultima = zIndex 0)
+- **Toolbar de reordenacao** no LayersPanel:
+  - 4 botoes: Bring to Front (ChevronsUp), Bring Forward (ChevronUp), Send Backward (ChevronDown), Send to Back (ChevronsDown)
+  - Botoes `disabled` quando nenhum elemento selecionado
+  - Clique → action da store → recalculo zIndex → sync Fabric
+- **Drag-and-drop reordenacao** no LayersPanel (HTML5 Drag API):
+  - Cada linha: `draggable`
+  - `onDragStart` → `e.dataTransfer.setData('text/plain', id)`
+  - `onDragOver` → `preventDefault()` + `dropEffect = 'move'` + indicador visual (`border-t-2 border-blue-400`)
+  - `onDragLeave` → limpa indicador
+  - `onDrop` → calcula `fromIndex`/`toIndex` → `splice` no array ordenado → `reorderElementsByZIndex(newOrder)`
+- **Sincronizacao zIndex → Fabric canvas** (`canvas-area.tsx`):
+  - `elementOrderKey` — string derivada de `elements.map(id).join(',') | zIndex.join(',')`
+  - `useEffect` observa `elementOrderKey` → reordena objetos no canvas
+  - Usa `canvas.remove(obj)` + `canvas.insertAt(targetIdx, obj)` para posicionar cada objeto
+  - Ordenacao: zIndex ascendente = posicao 0 (fundo) ate posicao n (frente)
+
+### Criterios de aceite
+
+- [x] Reorder visual funciona (drag-drop + botoes toolbar)
+- [x] Ordem continua correta apos selecao e edicao (zIndex mantido)
+- [x] Estado representa a mesma ordem (store zIndices ≡ canvas object order)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (actions de reordenacao)            |
+| `src/components/editor/layers-panel.tsx` | Atualizado (drag-drop + toolbar)           |
+| `src/components/editor/canvas-area.tsx` | Atualizado (z-order sync Fabric)            |
+
+### Observacoes
+
+- `canvas.remove(obj)` + `canvas.insertAt(idx, obj)` e a API de reordenacao do Fabric.js v6 (nao ha `moveTo`)
+- `elementOrderKey` combina IDs e zIndices em uma string para deteccao eficiente de mudancas de ordem
+- Drag-and-drop usa HTML5 nativo (sem dependencia extra); indicador visual e `border-t-2` na posicao de insercao
+- `bringForward`/`sendBackward` fazem swap de zIndex (nao incremento) para manter zIndices consistentes sem gaps
 
 ---

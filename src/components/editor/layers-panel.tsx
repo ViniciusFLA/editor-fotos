@@ -1,7 +1,15 @@
 'use client';
 
-import { useMemo, useCallback } from 'react';
-import { Square, Type, ImageIcon } from 'lucide-react';
+import { useMemo, useCallback, useState } from 'react';
+import {
+  Square,
+  Type,
+  ImageIcon,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUp,
+  ChevronsDown,
+} from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
 import type { AnyElement } from '@/types';
 
@@ -16,10 +24,19 @@ export function LayersPanel() {
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const setSelectedElementIds = useEditorStore((s) => s.setSelectedElementIds);
   const updateElement = useEditorStore((s) => s.updateElement);
+  const bringForward = useEditorStore((s) => s.bringForward);
+  const sendBackward = useEditorStore((s) => s.sendBackward);
+  const bringToFront = useEditorStore((s) => s.bringToFront);
+  const sendToBack = useEditorStore((s) => s.sendToBack);
+  const reorderElementsByZIndex = useEditorStore((s) => s.reorderElementsByZIndex);
+
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const sorted = useMemo(() => {
     return [...elements].sort((a, b) => b.zIndex - a.zIndex);
   }, [elements]);
+
+  const selectedId = selectedElementIds[0];
 
   const handleSelect = useCallback(
     (id: string) => {
@@ -44,6 +61,51 @@ export function LayersPanel() {
     [updateElement],
   );
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, id: string) => {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', id);
+    },
+    [],
+  );
+
+  const handleDragOver = useCallback(
+    (e: React.DragEvent, index: number) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      setDragOverIndex(index);
+    },
+    [],
+  );
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverIndex(null);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent, toIndex: number) => {
+      e.preventDefault();
+      setDragOverIndex(null);
+
+      const draggedId = e.dataTransfer.getData('text/plain');
+      if (!draggedId) return;
+
+      const currentSorted = [...useEditorStore.getState().elements].sort(
+        (a, b) => b.zIndex - a.zIndex,
+      );
+
+      const fromIndex = currentSorted.findIndex((el) => el.id === draggedId);
+      if (fromIndex < 0 || fromIndex === toIndex) return;
+
+      const newOrder = [...currentSorted];
+      const [removed] = newOrder.splice(fromIndex, 1);
+      newOrder.splice(toIndex, 0, removed!);
+
+      reorderElementsByZIndex(newOrder.map((el) => el.id));
+    },
+    [reorderElementsByZIndex],
+  );
+
   if (sorted.length === 0) {
     return (
       <div className='flex w-48 flex-col border-r bg-card shrink-0'>
@@ -61,22 +123,67 @@ export function LayersPanel() {
 
   return (
     <div className='flex w-48 flex-col border-r bg-card shrink-0'>
-      <div className='flex h-10 items-center border-b px-3'>
+      <div className='flex h-10 items-center justify-between border-b px-2'>
         <span className='text-xs font-medium text-muted-foreground'>
           Layers
         </span>
       </div>
 
-      <div className='flex flex-1 flex-col overflow-y-auto'>
-        {sorted.map((el) => {
-          const isSelected = selectedElementIds.includes(el.id);
+      <div className='flex items-center justify-center gap-0.5 border-b px-1 py-0.5'>
+        <button
+          onClick={() => selectedId && bringToFront(selectedId)}
+          disabled={!selectedId}
+          className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
+          title='Bring to Front'
+        >
+          <ChevronsUp className='h-3 w-3 text-muted-foreground' />
+        </button>
+        <button
+          onClick={() => selectedId && bringForward(selectedId)}
+          disabled={!selectedId}
+          className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
+          title='Bring Forward'
+        >
+          <ChevronUp className='h-3 w-3 text-muted-foreground' />
+        </button>
+        <button
+          onClick={() => selectedId && sendBackward(selectedId)}
+          disabled={!selectedId}
+          className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
+          title='Send Backward'
+        >
+          <ChevronDown className='h-3 w-3 text-muted-foreground' />
+        </button>
+        <button
+          onClick={() => selectedId && sendToBack(selectedId)}
+          disabled={!selectedId}
+          className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
+          title='Send to Back'
+        >
+          <ChevronsDown className='h-3 w-3 text-muted-foreground' />
+        </button>
+      </div>
+
+      <div
+        className='flex flex-1 flex-col overflow-y-auto'
+        onDragLeave={handleDragLeave}
+      >
+        {sorted.map((el, i) => {
+          const isSelected = el.id === selectedId;
+          const isDragOver = dragOverIndex === i;
           const Icon = typeIcons[el.type] ?? Square;
 
           return (
             <button
               key={el.id}
+              draggable
               onClick={() => handleSelect(el.id)}
+              onDragStart={(e) => handleDragStart(e, el.id)}
+              onDragOver={(e) => handleDragOver(e, i)}
+              onDrop={(e) => handleDrop(e, i)}
               className={`flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors ${
+                isDragOver ? 'border-t-2 border-blue-400' : ''
+              } ${
                 isSelected
                   ? 'bg-blue-50 text-blue-900 dark:bg-blue-950 dark:text-blue-100'
                   : 'hover:bg-muted/50'
