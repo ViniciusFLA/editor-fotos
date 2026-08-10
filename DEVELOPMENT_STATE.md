@@ -6,12 +6,10 @@
 **ETAPA 02 — Canvas Engine** — CONCLUIDA
 **ETAPA 03 — Modelo de Dados dos Elementos** — CONCLUIDA
 **ETAPA 04 — Seleção** — CONCLUIDA
-
-**ETAPA 04 — Seleção** — CONCLUIDA
 **ETAPA 05 — Move, Resize e Rotate** — CONCLUIDA
+**ETAPA 06 — Upload e Inserção de Imagens** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 06 — Upload e Inserção de Imagens
-
+**Próxima etapa:** ETAPA 07 — Text Elements
 **Última atualização:** 2026-08-10
 
 ---
@@ -366,5 +364,77 @@ Permitir transformacao completa de objetos (drag, resize, rotate) com sincroniza
 - Nao ha sincronizacao durante mousemove — apenas no evento `object:modified` (ao final da transformacao)
 - `normalizeFabricObject` e chamado antes de extrair updates para garantir width/height finais no store
 - Fabric.js v6 usa `angle` (graus) internamente; mapping para `rotation` no modelo e feito em `extractCommonUpdates`
+
+---
+
+## ETAPA 06 — Upload e Inserção de Imagens
+
+### Status: CONCLUIDA
+
+### Objetivo
+Permitir adicionar imagens reais ao canvas via file picker e drag-and-drop, com validacao e dimensionamento inicial apropriado.
+
+### Implementado
+
+- **File picker** via LeftSidebar:
+  - Hidden `<input type='file' accept='image/png,image/jpeg,image/webp'>`
+  - Clique no icone Uploads dispara `fileInputRef.current?.click()`
+  - Arquivo selecionado: validado → `URL.createObjectURL()` → `setPendingImageSrc(url)`
+  - URL anterior revogada automaticamente (`URL.revokeObjectURL`)
+- **Drag and drop** no CanvasArea:
+  - Handlers `onDragEnter`, `onDragOver`, `onDragLeave`, `onDrop` no container
+  - `dragCounterRef` para tracking correto de enter/leave aninhados
+  - Feedback visual: `bg-blue-50 ring-2 ring-blue-400 ring-inset` quando arrastando
+  - Drop: validacao → object URL → store `pendingImageSrc`
+- **Validacao** (`src/lib/image-validation.ts`):
+  - Tipos aceitos: `image/png`, `image/jpeg`, `image/webp`
+  - Tamanho maximo: 20 MB
+  - Erro exibido no tooltip do icone Uploads (icone fica `text-destructive`)
+  - Erro auto-clear ao selecionar arquivo valido
+- **Inserção da imagem no canvas** (CanvasArea):
+  - `useEffect` observa `pendingImageSrc` da store
+  - `FabricImage.fromURL(src)` carrega a imagem
+  - Dimensionamento inicial: max 70% do canvas (`MAX_IMAGE_DIMENSION = 0.7`)
+  - Mantem aspect ratio, centraliza no canvas
+  - `scaleX`/`scaleY` = scale ratio; `width`/`height` = dimensoes naturais
+  - `setElementId(fabricImage, id)` para rastreamento
+  - `canvas.add(fabricImage)` + `canvas.setActiveObject(fabricImage)`
+  - `ImageElement` criado e adicionado ao Zustand via `addElement`
+  - `pendingImageSrc` limpo apos insercao
+- **Store** (`editor-store.ts`):
+  - `pendingImageSrc: string | null` — mensagem entre LeftSidebar e CanvasArea
+  - `uploadError: string | null` — feedback de validacao
+  - `setPendingImageSrc`, `setUploadError` — setters
+
+### Criterios de aceite
+
+- [x] Usuario consegue importar imagem (file picker + drag-drop)
+- [x] Imagem aparece no canvas (FabricImage criado e adicionado)
+- [x] Pode mover/resize/rotate (herdado da ETAPA 05 via `object:modified`)
+- [x] Upload invalido gera feedback (icone vermelho + tooltip com erro)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                      |
+|--------------------------------------|-------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (pendingImageSrc, uploadError) |
+| `src/components/editor/left-sidebar.tsx` | Atualizado (file input, upload trigger) |
+| `src/components/editor/canvas-area.tsx` | Atualizado (drag-drop, image insertion) |
+| `src/lib/image-validation.ts`        | Criado (validacao de imagem)             |
+
+### Observacoes
+
+- `pendingImageSrc` usa object URLs (`blob:...`); URLs antigas sao revogadas ao selecionar novo arquivo
+- Imagens sao dimensionadas para caber em 70% do canvas (evita overflow em canvas pequeno)
+- `zIndex` do ImageElement e calculado a partir do store, nao do Fabric.js (Fabric.js ordena por posicao no array)
+- Drag-and-drop usa `dragCounterRef` para evitar flicker em elementos aninhados
 
 ---
