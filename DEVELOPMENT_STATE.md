@@ -5,8 +5,9 @@
 **ETAPA 01 — Project Setup** — CONCLUIDA
 **ETAPA 02 — Canvas Engine** — CONCLUIDA
 **ETAPA 03 — Modelo de Dados dos Elementos** — CONCLUIDA
+**ETAPA 04 — Seleção** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 04 — Seleção
+**Próxima etapa:** ETAPA 05 — Move, Resize e Rotate
 
 **Última atualização:** 2026-08-10
 
@@ -235,5 +236,68 @@ Definir modelo tipado independente do Fabric com schemas Zod, mapeamento bidirec
 - `createFabricObject` tem overloads para retorno tipado; imagem e async (ETAPA 06 usara isso)
 - `syncElementToFabric` e `extractElementUpdates` serao usados em ETAPA 04 (selecao) e ETAPA 08 (properties panel)
 - `applyCommonProps` nao aplica `scaleX`/`scaleY` em TextElement (FabricText gerencia internamente)
+
+---
+
+## ETAPA 04 — Seleção
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar selecao consistente com sincronizacao bidirecional entre Canvas (Fabric.js) e estado (Zustand), sem loops de sincronizacao.
+
+### Implementado
+
+- **Canvas com selecao habilitada** (`selection: true` em `use-canvas.ts`):
+  - `selectionColor: 'rgba(59, 130, 246, 0.1)'` — fundo azul translucido na area de selecao
+  - `selectionBorderColor: '#3b82f6'` — borda azul
+  - `selectionLineWidth: 1` com `selectionDashArray: [4, 4]` — linha tracejada
+  - `preserveObjectStacking: true` — ordem de stacking preservada durante selecao
+- **Sincronizacao Canvas → Zustand** (eventos Fabric):
+  - `selection:created` — clique em objeto → atualiza `selectedElementIds` na store
+  - `selection:updated` — Shift+clique para multi-selecao → atualiza store
+  - `selection:cleared` — clique fora (vazio) → limpa `selectedElementIds`
+  - IDs extraidos via `getElementId(obj)` do `WeakMap` da element-factory
+  - Comparacao de arrays antes de atualizar store (evita updates desnecessarios)
+- **Sincronizacao Zustand → Canvas** (efeito reactivo):
+  - `useEditorStore(s => s.selectedElementIds)` observa mudancas na store
+  - Quando IDs diferem do canvas: `discardActiveObject()` + `setActiveObject()`
+  - Multi-selecao via `ActiveSelection` quando >1 elemento selecionado
+  - Busca reversa de FabricObject via `findFabricObjectById(canvas, id)`
+- **Prevencao de loops**:
+  - `syncingFromCanvasRef` — flag `true` durante sync canvas→store
+  - Efeito store→canvas verifica flag antes de agir
+  - `requestAnimationFrame` para resetar flag apos sync completo
+  - Comparacao `arraysEqual` antes de qualquer acao para evitar updates circulares
+- **Helper `findFabricObjectById`** adicionado em `element-factory.ts`:
+  - Busca reversa: `canvas.getObjects().find(obj => getElementId(obj) === id)`
+
+### Criterios de aceite
+
+- [x] Estado e canvas permanecem sincronizados (bidirecional com loop prevention)
+- [x] Clicar fora (canvas vazio) limpa selecao (`selection:cleared` → store update)
+- [x] Nao existem loops de sincronizacao (`syncingFromCanvasRef` + `arraysEqual` guard)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                     |
+|--------------------------------------|--------------------------|
+| `src/hooks/use-canvas.ts`            | Atualizado (selection + sync) |
+| `src/editor/core/element-factory.ts` | Atualizado (findFabricObjectById) |
+
+### Observacoes
+
+- Fabric.js gerencia nativamente Shift+clique para multi-selecao com `selection: true`
+- `ActiveSelection` importado de `fabric` para multi-selecao programatica no sentido store→canvas
+- Eventos Fabric sao removidos no cleanup (`canvas.off()`), evitando memory leaks
+- `arraysEqual` usa `sort()` para comparacao independente de ordem
 
 ---

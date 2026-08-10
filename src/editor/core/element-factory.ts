@@ -12,6 +12,7 @@ import {
   Circle,
   Line,
   FabricObject,
+  Canvas,
 } from 'fabric';
 
 const elementIdMap = new WeakMap<FabricObject, string>();
@@ -224,6 +225,13 @@ export function extractElementUpdates(
         strokeWidth: (fabricObject as Rect | Circle).strokeWidth as number,
       };
   }
+}
+
+export function findFabricObjectById(
+  canvas: Canvas,
+  id: string,
+): FabricObject | undefined {
+  return canvas.getObjects().find((obj) => getElementId(obj) === id);
 }
 
 export function syncElementToFabric(
