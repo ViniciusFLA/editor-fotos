@@ -7,7 +7,10 @@
 **ETAPA 03 — Modelo de Dados dos Elementos** — CONCLUIDA
 **ETAPA 04 — Seleção** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 05 — Move, Resize e Rotate
+**ETAPA 04 — Seleção** — CONCLUIDA
+**ETAPA 05 — Move, Resize e Rotate** — CONCLUIDA
+
+**Próxima etapa:** ETAPA 06 — Upload e Inserção de Imagens
 
 **Última atualização:** 2026-08-10
 
@@ -299,5 +302,69 @@ Implementar selecao consistente com sincronizacao bidirecional entre Canvas (Fab
 - `ActiveSelection` importado de `fabric` para multi-selecao programatica no sentido store→canvas
 - Eventos Fabric sao removidos no cleanup (`canvas.off()`), evitando memory leaks
 - `arraysEqual` usa `sort()` para comparacao independente de ordem
+
+---
+
+## ETAPA 05 — Move, Resize e Rotate
+
+### Status: CONCLUIDA
+
+### Objetivo
+Permitir transformacao completa de objetos (drag, resize, rotate) com sincronizacao final ao Zustand e normalizacao de propriedades.
+
+### Implementado
+
+- **Transformacoes nativas do Fabric.js** (ja funcionam com `selection: true` da ETAPA 04):
+  - **Drag** — mover objeto com mouse
+  - **Resize** — handles de redimensionamento nos cantos/arestas
+  - **Rotate** — handle de rotacao no topo
+  - **Transform handles** — bounding box + resize corners + rotation handle (Fabric.js default)
+- **`object:modified` handler** em `use-canvas.ts`:
+  - Dispara ao final de cada transformacao (nao durante mousemove — sem spam de updates)
+  - Captura `canvas.getActiveObject()` (objeto modificado)
+  - Extrai ID via `getElementId()` do `WeakMap`
+  - Normaliza o FabricObject (`normalizeFabricObject`)
+  - Extrai updates via `extractElementUpdates(obj, element.type)`
+  - Persiste no Zustand via `store.updateElement(id, updates)`
+  - `syncingFromCanvasRef` previne loop com sync de selecao
+- **Normalizacao de escala** (`normalizeFabricObject` em `element-factory.ts`):
+  - Apos resize, Fabric.js pode alterar `scaleX`/`scaleY`
+  - Normalizacao bakeia scale em width/height: `width *= scaleX`, `height *= scaleY`, `scaleX = 1`, `scaleY = 1`
+  - Evita inconsistencia entre width/height e scale no modelo de dados
+- **Respeito a `locked`** (corrigido em `applyCommonProps`):
+  - `lockMovementX/Y`, `lockRotation`, `lockScalingX/Y` = `element.locked` (booleano direto)
+  - `selectable`, `evented` = `!element.locked`
+  - Funciona para locked=true (bloqueia) e locked=false (libera)
+  - Objeto bloqueado nao aceita transformacao
+
+### Criterios de aceite
+
+- [x] Mover funciona (drag nativo Fabric + sync Zustand no final)
+- [x] Redimensionar funciona (resize handles + normalizacao scale→width/height)
+- [x] Rotacionar funciona (rotation handle + angle→rotation mapping)
+- [x] Estado e atualizado corretamente (`object:modified` → `updateElement`)
+- [x] Objeto bloqueado nao transforma (`lockMovementX/Y`, `lockRotation`, `lockScalingX/Y`)
+- [x] Sem saltos inesperados ao finalizar transformacao (normalizacao garante consistencia)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                       |
+|--------------------------------------|--------------------------------------------|
+| `src/hooks/use-canvas.ts`            | Atualizado (object:modified handler)       |
+| `src/editor/core/element-factory.ts` | Atualizado (normalizeFabricObject, locked fix) |
+
+### Observacoes
+
+- Nao ha sincronizacao durante mousemove — apenas no evento `object:modified` (ao final da transformacao)
+- `normalizeFabricObject` e chamado antes de extrair updates para garantir width/height finais no store
+- Fabric.js v6 usa `angle` (graus) internamente; mapping para `rotation` no modelo e feito em `extractCommonUpdates`
 
 ---

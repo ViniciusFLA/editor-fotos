@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Canvas, ActiveSelection } from 'fabric';
-import { getElementId, findFabricObjectById } from '@/editor/core/element-factory';
+import { getElementId, findFabricObjectById, extractElementUpdates, normalizeFabricObject } from '@/editor/core/element-factory';
 import { useEditorStore } from '@/stores/editor-store';
 
 interface UseCanvasOptions {
@@ -137,6 +137,45 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
 
     canvas.requestRenderAll();
   }, [selectedElementIds, canvasReady]);
+
+  useEffect(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const handleObjectModified = () => {
+      const active = canvas.getActiveObject();
+      if (!active) return;
+
+      const id = getElementId(active);
+      if (!id) return;
+
+      syncingFromCanvasRef.current = true;
+
+      normalizeFabricObject(active);
+
+      const store = useEditorStore.getState();
+      const element = store.elements.find((el) => el.id === id);
+      if (!element) {
+        syncingFromCanvasRef.current = false;
+        return;
+      }
+
+      const updates = extractElementUpdates(active, element.type);
+      store.updateElement(id, updates);
+
+      canvas.requestRenderAll();
+
+      requestAnimationFrame(() => {
+        syncingFromCanvasRef.current = false;
+      });
+    };
+
+    canvas.on('object:modified', handleObjectModified);
+
+    return () => {
+      canvas.off('object:modified', handleObjectModified);
+    };
+  }, [canvasReady]);
 
   const recalculateScale = useCallback(() => {
     const container = containerRef.current;

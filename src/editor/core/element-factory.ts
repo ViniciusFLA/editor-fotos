@@ -39,19 +39,14 @@ function applyCommonProps(
     angle: element.rotation,
     opacity: element.opacity,
     visible: element.visible,
+    lockMovementX: element.locked,
+    lockMovementY: element.locked,
+    lockRotation: element.locked,
+    lockScalingX: element.locked,
+    lockScalingY: element.locked,
+    selectable: !element.locked,
+    evented: !element.locked,
   });
-
-  if (element.locked) {
-    fabricObject.set({
-      lockMovementX: true,
-      lockMovementY: true,
-      lockRotation: true,
-      lockScalingX: true,
-      lockScalingY: true,
-      selectable: false,
-      evented: false,
-    });
-  }
 }
 
 function extractCommonUpdates(
@@ -68,6 +63,20 @@ function extractCommonUpdates(
     opacity: fabricObject.opacity,
     visible: fabricObject.visible,
   };
+}
+
+export function normalizeFabricObject(fabricObject: FabricObject): void {
+  const sx = fabricObject.scaleX ?? 1;
+  const sy = fabricObject.scaleY ?? 1;
+
+  if (sx !== 1 || sy !== 1) {
+    fabricObject.set({
+      width: (fabricObject.width ?? 0) * sx,
+      height: (fabricObject.height ?? 0) * sy,
+      scaleX: 1,
+      scaleY: 1,
+    });
+  }
 }
 
 export function createFabricObject(
