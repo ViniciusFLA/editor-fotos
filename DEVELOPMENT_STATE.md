@@ -9,8 +9,9 @@
 **ETAPA 05 — Move, Resize e Rotate** — CONCLUIDA
 **ETAPA 06 — Upload e Inserção de Imagens** — CONCLUIDA
 **ETAPA 07 — Text Elements** — CONCLUIDA
+**ETAPA 08 — Properties Panel** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 08 — Properties Panel
+**Próxima etapa:** ETAPA 09 — Layers Panel
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview — 2026-08-10
@@ -542,6 +543,66 @@ Vercel Preview Deployment (primeiro deploy do projeto)
 
 ---
 
+## ETAPA 08 — Properties Panel
 
+### Status: CONCLUIDA
+
+### Objetivo
+Permitir edicao numerica das propriedades do elemento selecionado no painel direito, com atualizacao imediata do canvas e do estado.
+
+### Implementado
+
+- **RightPanel reescrito** (`src/components/editor/right-panel.tsx`):
+  - Sem elemento selecionado: placeholder "Select an element"
+  - Elemento selecionado: painel com propriedades organizadas por categorias
+  - **Position**: campos X, Y (NumberInput)
+  - **Size**: campos W, H (NumberInput, min=1)
+  - **Transform**: Rotation (NumberInput) + Opacity (range slider 0-100% com badge)
+  - **Text** (apenas para elementos `TextElement`):
+    - Font Size (Sz) — NumberInput
+    - Font Family (Fnt) — select com Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier New, Impact
+    - Font Weight (W) — select Normal/Bold
+    - Alignment (Al) — botoes Left/Center/Right com estado ativo
+    - Color (C) — color picker nativo + valor hex exibido
+  - Cada alteracao chama `store.updateElement(id, updates)`
+- **Sincronizacao Store → Canvas** (nova em `canvas-area.tsx`):
+  - `useEffect` observa `selectedElement` da store via `useEditorStore`
+  - `prevElementRef` trackeia estado serializado para evitar syncs desnecessarios
+  - Quando propriedades mudam (store → canvas): `syncElementToFabric` + `requestRenderAll`
+  - `syncingFromCanvasRef`: quando canvas modifica objeto, `prevElementRef` e atualizado sem sync
+  - Loop prevention: `prevElementRef` comparado com `JSON.stringify(selectedElement)`
+- **`syncingFromCanvasRef` exportado** de `use-canvas.ts` para uso pelo sync de propriedades
+- **Bidirecional**:
+  - **Panel → Store → Canvas**: usuario edita painel → `updateElement` → useEffect detecta mudanca → `syncElementToFabric`
+  - **Canvas → Store → Panel**: usuario move/resize no canvas → `object:modified` → `updateElement` → React re-render → painel atualiza
+
+### Criterios de aceite
+
+- [x] Propriedades exibem valores corretos (X, Y, W, H, Rotation, Opacity + text props)
+- [x] Edicao altera objeto selecionado (painel → store → canvas imediato)
+- [x] Mudancas no canvas atualizam painel (canvas → store → re-render)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                        |
+|--------------------------------------|---------------------------------------------|
+| `src/components/editor/right-panel.tsx` | Reescrito (property inputs)               |
+| `src/components/editor/canvas-area.tsx` | Atualizado (store→canvas property sync)   |
+| `src/hooks/use-canvas.ts`            | Atualizado (exporta syncingFromCanvasRef)    |
+
+### Observacoes
+
+- `handleChange` usa `useCallback` com dependencia em `element` para evitar re-renders desnecessarios
+- `NumberInput` arredonda valores para 2 casas decimais (evita floats longos)
+- Range de opacity mapeia 0-100 para 0-1 internamente
+- `useMemo` filtra `selectedElement` do array `elements` para evitar re-render em mudancas de outros elementos
 
 ---

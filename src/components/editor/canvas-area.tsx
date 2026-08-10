@@ -5,7 +5,7 @@ import { FabricImage, FabricText } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
-import { setElementId } from '@/editor/core/element-factory';
+import { setElementId, syncElementToFabric, findFabricObjectById } from '@/editor/core/element-factory';
 import { validateImageFile } from '@/lib/image-validation';
 import type { ImageElement, TextElement } from '@/types';
 
@@ -19,6 +19,7 @@ export function CanvasArea() {
     canvasElRef,
     containerRef,
     canvasInstanceRef,
+    syncingFromCanvasRef,
     scale,
     canvasReady,
   } = useCanvas({ logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -183,6 +184,42 @@ export function CanvasArea() {
 
     insertText();
   }, [triggeredTextAdd, canvasReady, insertText]);
+
+  const prevElementRef = useRef<string | null>(null);
+
+  const selectedElement = useEditorStore((s) => {
+    const id = s.selectedElementIds[0];
+    if (!id) return null;
+    return s.elements.find((el) => el.id === id) ?? null;
+  });
+
+  useEffect(() => {
+    if (syncingFromCanvasRef.current) {
+      if (selectedElement) {
+        prevElementRef.current = JSON.stringify(selectedElement);
+      }
+      return;
+    }
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady || !selectedElement) {
+      prevElementRef.current = null;
+      return;
+    }
+
+    const serialized = JSON.stringify(selectedElement);
+    if (serialized === prevElementRef.current) return;
+    prevElementRef.current = serialized;
+
+    const fabricObj = findFabricObjectById(canvas, selectedElement.id);
+    if (!fabricObj) {
+      prevElementRef.current = null;
+      return;
+    }
+
+    syncElementToFabric(selectedElement, fabricObj);
+    canvas.requestRenderAll();
+  }, [selectedElement, canvasReady, canvasInstanceRef, syncingFromCanvasRef]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

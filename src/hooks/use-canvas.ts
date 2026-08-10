@@ -215,6 +215,7 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvasElRef,
     containerRef,
     canvasInstanceRef,
+    syncingFromCanvasRef,
     scale,
     canvasReady,
   };
