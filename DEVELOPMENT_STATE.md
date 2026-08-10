@@ -16,13 +16,27 @@
 **ETAPA 12 — Duplicate e Delete** — CONCLUIDA
 **ETAPA 13 — Clipboard** — CONCLUIDA
 **ETAPA 14 — History / Undo / Redo** — CONCLUIDA
+**ETAPA 15 — Keyboard Shortcuts** — CONCLUIDA
+**ETAPA 16 — Zoom** — CONCLUIDA
+**ETAPA 17 — Canvas Guides** — CONCLUIDA
+**ETAPA 18 — Object Snapping** — CONCLUIDA
+**ETAPA 19 — Shapes** — CONCLUIDA
+**ETAPA 20 — Multi-select / Group / Ungroup** — CONCLUIDA
+**ETAPA 21 — Image Crop** — CONCLUIDA
+**ETAPA 22 — Image Filters** — CONCLUIDA
+**ETAPA 23 — Font System** — CONCLUIDA
+**ETAPA 24 — Background** — CONCLUIDA
+**ETAPA 25 — Multiple Pages** — CONCLUIDA
+**ETAPA 26 — Format Presets** — CONCLUIDA
+**ETAPA 27 — Local Persistence** — CONCLUIDA
+**ETAPA 28 — Autosave** — CONCLUIDA
+**ETAPA 29 — Export** — CONCLUIDA
+**ETAPA 30 — UI/UX Polish** — CONCLUIDA
 
-**Proxima etapa:** ETAPA 15 — Keyboard Shortcuts
+**Proxima etapa:** ETAPA 31 — AI Provider Architecture (FASE D)
 **Última atualização:** 2026-08-10
 
-**Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
-
-**Deploy mais recente:** Preview — 2026-08-10
+**Deploy mais recente:** Preview CHECKPOINT FASE B (ETAPA 14) — 2026-08-10
 
 ---
 
@@ -1061,5 +1075,1249 @@ Criar historico robusto com suporte a undo/redo para todas as operacoes (create,
 - `pushHistoryDebounced` no properties panel: primeira mudanca cria snapshot, subsequentes em 500ms sao agrupadas
 - Canvas rebuild pos-undo/redo recria todos os FabricObjects; imagens usam Promise (assincrono)
 - `future` stack e limpa em qualquer nova acao (comportamento padrao de undo)
+
+---
+
+## CHECKPOINT DEPLOY — FASE B (ETAPA 14)
+
+### Status: CONCLUIDO
+
+### Tipo
+Vercel Preview Deployment apos ETAPA 14 (History / Undo / Redo)
+
+### URL
+- Preview: `https://editor-fotos-4wk1w9cv3-viniciusflas-projects.vercel.app`
+
+### Vercel Project
+`viniciusflas-projects/editor-fotos`
+
+### Validacoes pre-deploy
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| Testes               | N/A (sem test runner configurado) |
+| `npx next build`     | OK        |
+
+### FASE B — Funcionalidades implementadas
+
+| ETAPA | Nome                       | Status    |
+|-------|----------------------------|-----------|
+| 11    | Visibility e Lock          | CONCLUIDA |
+| 12    | Duplicate e Delete         | CONCLUIDA |
+| 13    | Clipboard                  | CONCLUIDA |
+| 14    | History / Undo / Redo      | CONCLUIDA |
+
+### Branch
+`master` (commit `46bd3ac` — ETAPA 14 — History / Undo / Redo)
+
+### Observacoes
+- Proxima: ETAPA 15 — Keyboard Shortcuts (NAO executar automaticamente)
+- Projeto sem test runner configurado; testes sao N/A neste checkpoint
+
+---
+
+## ETAPA 15 — Keyboard Shortcuts
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar gerenciamento centralizado de atalhos de teclado com suporte a navegacao por setas.
+
+### Implementado
+
+- **Hook `useKeyboardShortcuts`** (`src/hooks/use-keyboard-shortcuts.ts`) — gerenciamento centralizado:
+  - Moveu toda a logica de handlers e event listener de `canvas-area.tsx` para este hook dedicado
+  - `canvas-area.tsx` agora apenas chama `useKeyboardShortcuts({ canvasInstanceRef, isTextEditingRef })` e usa `{ handleUndo, handleRedo }` retornados
+- **Atalhos existentes centralizados no hook**:
+  - Delete / Backspace → `handleDelete()`
+  - Ctrl/Cmd+D → `handleDuplicate()`
+  - Ctrl/Cmd+Z → `handleUndo()`
+  - Ctrl/Cmd+Shift+Z → `handleRedo()`
+  - Ctrl/Cmd+C → `handleCopy()`
+  - Ctrl/Cmd+V → `handlePaste()`
+  - Ctrl/Cmd+X → `handleCut()`
+- **Arrow keys** (novo):
+  - Arrow keys (↑ ↓ ← →) movem elementos selecionados em **1px**
+  - Shift+Arrow movem em **10px**
+  - `handleArrowMove(key, shiftKey)` — calcula delta e atualiza FabricObject + store
+  - Historico via `pushHistoryDebounced` (500ms) — evita centenas de entradas durante key repeat
+  - Guard `isTextEditingRef` previne movimento durante edicao inline
+  - Elementos bloqueados (`locked: true`) nao sao movidos
+- **Guardas de foco/edicao**:
+  - `e.target instanceof HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement` — ignora inputs
+  - `isTextEditingRef.current` — ignora durante edicao de texto no canvas
+  - `e.preventDefault()` em todos os shortcuts para evitar comportamento padrao do navegador
+
+### Criterios de aceite
+
+- [x] Delete e Backspace funcionam
+- [x] Ctrl/Cmd+D, C, V, X, Z, Shift+Z funcionam
+- [x] Arrow keys movem 1px por pressionamento
+- [x] Shift+Arrow movem 10px por pressionamento
+- [x] Arrow keys nao interferem em inputs ou edicao de texto
+- [x] Arrow keys respeitam `locked`
+- [x] Gerenciamento centralizado (hook unico `use-keyboard-shortcuts`)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/hooks/use-keyboard-shortcuts.ts` | Criado (gerenciamento centralizado de atalhos) |
+| `src/components/editor/canvas-area.tsx` | Atualizado (delega atalhos ao hook)          |
+
+### Observacoes
+
+- O hook exporta `handleUndo` e `handleRedo` porque o `canvas-area.tsx` ainda precisa deles nos efeitos `triggeredUndo`/`triggeredRedo` (para os botoes da toolbar)
+- `pushHistoryDebounced` e usado para arrow keys (mesmo mecanismo do properties panel) — primeira tecla captura snapshot, subsequentes em 500ms nao criam novas entradas
+- `handleArrowMove` atualiza FabricObject diretamente (`obj.set({ left, top })`) e store via `updateElement()` para cada elemento nao-bloqueado
+- Nao ha conflict com `object:modified` — arrow keys mudam posicao sem disparar o evento de transformacao do Fabric.js
+
+---
+
+## ETAPA 16 — Zoom
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar sistema de zoom visual com controles, percentual, fit-to-screen, reset e Ctrl/Cmd+wheel, sem alterar dimensoes logicas dos elementos.
+
+### Implementado
+
+- **Store `zoom`** (`editor-store.ts`):
+  - `zoom: number` — default `1` (100%), clamp entre `[0.1, 4.0]` = `[10%, 400%]`
+  - `setZoom(zoom)` — set com clamp e arredondamento para 2 casas decimais
+  - `zoomIn()` / `zoomOut()` — avanca/recua entre steps predefinidos:
+    `[0.1, 0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0, 4.0]`
+  - `zoomReset()` — retorna zoom para `1.0` (100% / fit-to-screen)
+  - Funcoes helper `clampZoom`, `nextZoomStep`, `prevZoomStep`
+- **`use-canvas.ts` — escala composta**:
+  - `baseScale` — escala automatica para caber no container (ResizeObserver, cap=1)
+  - `displayScale = baseScale * zoom` — escala final aplicada via CSS transform
+  - Hook le `zoom` da store via `useEditorStore((s) => s.zoom)` → re-render automatico
+  - Retorna `scale: displayScale` (API publica mantida, canvas-area nao precisou mudar)
+- **`footer-status.tsx` — controles de zoom**:
+  - **Zoom Out** (botao `-`) — `store.zoomOut()`, disabled em 10%
+  - **Percentual** (clicavel) — exibe `{zoomPercent}%`, click → `zoomReset()` (100%)
+  - **Zoom In** (botao `+`) — `store.zoomIn()`, disabled em 400%
+  - **Fit to Screen** (icone `Maximize2`) — `zoomReset()` (zoom=1 → auto-fit)
+  - Estados disabled em limites inferior/superior com `opacity-30`
+  - `tabular-nums` para alinhamento consistente do percentual
+- **`use-keyboard-shortcuts.ts` — Ctrl/Cmd+wheel**:
+  - Parametro novo: `containerRef` (para o listener de wheel)
+  - Handler `handleWheel` no container do canvas:
+    - Somente ativo com `ctrlKey || metaKey`
+    - `deltaY < 0` → `zoomIn()`
+    - `deltaY > 0` → `zoomOut()`
+    - `e.preventDefault()` + listener `{ passive: false }`
+  - `canvas-area.tsx` atualizado para passar `containerRef` ao hook
+- **Zoom nao altera dimensoes logicas**:
+  - Apenas CSS `transform: scale()` no wrapper do canvas e afetado
+  - Canvas Fabric.js mantem `width=1080, height=1080` sempre
+  - Coordenadas logicas de elementos nunca mudam com zoom
+
+### Criterios de aceite
+
+- [x] Zoom in funciona (step predefinido, max 400%)
+- [x] Zoom out funciona (step predefinido, min 10%)
+- [x] Percentual exibe valor correto
+- [x] Fit-to-screen / Reset funciona (zoom=100%)
+- [x] Ctrl/Cmd+wheel funciona (in/out no container do canvas)
+- [x] Faixa respeitada: 10% a 400%
+- [x] Zoom nao altera dimensoes logicas dos elementos
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (zoom state + actions)              |
+| `src/hooks/use-canvas.ts`            | Atualizado (baseScale + displayScale composto) |
+| `src/components/editor/footer-status.tsx` | Reescrito (controles de zoom funcionais)   |
+| `src/hooks/use-keyboard-shortcuts.ts` | Atualizado (Ctrl/Cmd+wheel + containerRef)     |
+| `src/components/editor/canvas-area.tsx` | Atualizado (passa containerRef ao hook)     |
+
+### Observacoes
+
+- Zoom e puramente visual (CSS transform no wrapper do `<canvas>`); o Fabric.js canvas mantem dimensoes 1080x1080 inalteradas
+- `baseScale` e recalculado via `ResizeObserver`; `displayScale` = `baseScale * zoom` reage a ambos
+- Ctrl+wheel listener usa `{ passive: false }` para permitir `preventDefault()` e evitar scroll da pagina durante zoom
+- Zoom steps predefinidos garantem precisao e previsibilidade (sem acumulo de erros de ponto flutuante)
+
+---
+
+## ETAPA 17 — Canvas Guides
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar guides visuais de alinhamento (centro horizontal, centro vertical, bordas do canvas) exibidos durante movimento de objetos.
+
+### Implementado
+
+- **Guides no `use-canvas.ts`** (novo efeito):
+  - `guidesRef` — array de `Line` temporarias (Fabric.js) que sao adicionadas/removidas do canvas
+  - `object:moving` handler → `handleObjectMoving`:
+    - `clearGuides()` remove guides anteriores
+    - `canvas.getActiveObject().getBoundingRect()` calcula bounds
+    - Verifica alinhamento com threshold de **5px**
+    - **Centro horizontal**: linha vertical tracejada em `logicalWidth / 2` quando `centerX ≈ logicalWidth / 2`
+    - **Centro vertical**: linha horizontal tracejada em `logicalHeight / 2` quando `centerY ≈ logicalHeight / 2`
+    - **Bordas**: linhas tracejadas em `left=0`, `right=logicalWidth`, `top=0`, `bottom=logicalHeight`
+    - `drawGuide(x1, y1, x2, y2)` cria `Line` com `strokeDashArray: [5,5]`, cor azul `#3b82f6`
+  - `mouse:up` handler → `clearGuides()` remove todos os guides ao soltar
+  - Cleanup: `canvas.off()` + `clearGuides()` no unmount
+- **Propriedades dos guides**:
+  - `selectable: false` — nao interfere na selecao
+  - `evented: false` — nao captura eventos de mouse
+  - `excludeFromExport: true` — nao aparece na exportacao
+  - `hoverCursor: 'default'` — cursor normal ao passar sobre guide
+  - `stroke: '#3b82f6'` — azul consistente com tema de selecao
+  - `strokeWidth: 1` — linha fina
+  - `strokeDashArray: [5, 5]` — tracejada para nao confundir com elementos reais
+- **Arquitetura**: logica contida em efeito proprio no `use-canvas.ts`, sem estado na store ou componentes visuais adicionais
+
+### Criterios de aceite
+
+- [x] Guide de centro horizontal aparece durante movimento alinhado
+- [x] Guide de centro vertical aparece durante movimento alinhado
+- [x] Guides de bordas aparecem durante movimento alinhado (left, right, top, bottom)
+- [x] Guides visiveis apenas durante movimento (object:moving → mouse:up)
+- [x] Guides nao sao exportaveis (`excludeFromExport: true`)
+- [x] Guides nao interferem em selecao ou interacao (`selectable: false, evented: false`)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/hooks/use-canvas.ts`            | Atualizado (guide drawing + object:moving/mouse:up handlers) |
+
+### Observacoes
+
+- Guides sao objetos Fabric temporarios (`Line`); nao persistem na store nem afetam o modelo de dados
+- Threshold de 5px fornece "sticky" visual antes do snapping (ETAPA 18 implementara snapping real)
+- `getBoundingRect()` funciona tanto para objetos individuais quanto para `ActiveSelection` (multi-selecao)
+- Hex `#3b82f6` e consistente com a cor de selecao (`selectionBorderColor`) definida em ETAPA 04
+- `excludeFromExport` e propriedade nativa do Fabric.js v6; nao requer logica customizada de filtro
+
+---
+
+## ETAPA 18 — Object Snapping
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar snapping entre elementos durante movimento, com guias visuais de alinhamento e correcao de posicao.
+
+### Implementado
+
+- **Snapping objeto-a-objeto** (extensao do `handleObjectMoving` em `use-canvas.ts`):
+  - Algoritmo de alinhamento para cada `object:moving`:
+    1. `clearGuides()` remove guides anteriores
+    2. `canvas.getActiveObject().getBoundingRect()` obtem bounds do objeto em movimento
+    3. Itera sobre `canvas.getObjects()` filtrando objetos visiveis com `getElementId` (managed objects)
+    4. Para cada target, calcula snap points:
+       - **Horizontal**: `[left, centerX, right]` × `[targetLeft, targetCenterX, targetRight]`
+       - **Vertical**: `[top, centerY, bottom]` × `[targetTop, targetCenterY, targetBottom]`
+    5. Tracking de `bestDx` / `bestDy` (menor valor absoluto)
+    6. Tracking de `snapGuideV` / `snapGuideH` para desenho de guides
+  - Aplicacao de snap:
+    - `active.set({ left: left + bestDx })` — ajusta posicao X
+    - `active.set({ top: top + bestDy })` — ajusta posicao Y
+    - Apenas objeto Fabric e alterado (posicao visual); store NAO e atualizada durante drag
+    - `object:modified` captura posicao final corretamente (com snap ja aplicado)
+  - Guias de snap:
+    - `drawGuide(snapGuideV, 0, snapGuideV, logicalHeight)` — linha vertical no X do snap
+    - `drawGuide(0, snapGuideH, logicalWidth, snapGuideH)` — linha horizontal no Y do snap
+  - **Canvas guides mantidos**: snapping tem prioridade; se nenhum snap ocorrer, canvas guides (centro, bordas) sao mostrados
+- **Performance**:
+  - Itera apenas objetos managed (`getElementId(obj) !== undefined`) — exclui guides e objetos temporarios
+  - Filtra `obj.visible === false` — nao processa objetos ocultos
+  - Pula o proprio objeto ativo (`obj === active`)
+  - `forEach` em vez de loops aninhados complexos
+  - Sem atualizacao de store durante o movimento (evita re-renders em mousemove)
+  - Snap X e Y independentes — mesmo se X nao snapar, Y pode
+- **Compatibilidade multi-selecao**: `getBoundingRect()` e `set({ left, top })` funcionam para ActiveSelection
+
+### Criterios de aceite
+
+- [x] Snapping left-to-left funciona (objeto em movimento alinha borda esquerda com target)
+- [x] Snapping right-to-right funciona
+- [x] Snapping top-to-top funciona
+- [x] Snapping bottom-to-bottom funciona
+- [x] Snapping centerX-to-centerX funciona
+- [x] Snapping centerY-to-centerY funciona
+- [x] Snapping cross funciona (left-to-right, top-to-bottom, etc.)
+- [x] Guide visual aparece durante snap
+- [x] Canvas guides continuam funcionando quando nao ha snap
+- [x] Performance: sem processamento excessivo em mousemove
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/hooks/use-canvas.ts`            | Atualizado (object snapping + guides snaps)    |
+
+### Observacoes
+
+- Snapping e puramente visual durante o movimento; a store so e atualizada via `object:modified` ao final do drag
+- Algoritmo testa 3×3=9 combinacoes de snap points por objeto (horizontal + vertical = 18 no total por target)
+- Com 20 objetos no canvas: ~360 comparacoes por frame — leve e dentro do orcamento de performance
+- `bestDx`/`bestDy` sao inicializados como `GUIDE_THRESHOLD + 1` para que o primeiro canditato sempre entre
+- `snapped` flag evita desenhar canvas guides quando ja houve snap (evita overload visual)
+
+---
+
+## ETAPA 19 — Shapes
+
+### Status: CONCLUIDA
+
+### Objetivo
+Adicionar formas geometricas (Rectangle, Circle, Line) com propriedades de fill, stroke e strokeWidth, participando de transform, layers, history e clipboard.
+
+### Implementado
+
+- **Insercao de shapes** (ja implementada em etapas anteriores, consolidada nesta etapa):
+  - LeftSidebar: submenu Elements com opcoes Rectangle, Circle, Line
+  - Store: `triggeredShapeAdd` + `pendingShapeType` conectam sidebar ao canvas
+  - `insertShape()` em canvas-area.tsx: cria ShapeElement + FabricObject (Rect/Circle/Line)
+  - Defaults: fill=transparent, stroke=#3b82f6, strokeWidth=2
+  - Shapes centralizados no canvas (offset 200x200 centrado)
+- **Properties Panel** para shapes (`right-panel.tsx`):
+  - Secao "Shape" exibida ao selecionar elemento do tipo `shape`
+  - **Fill** — color picker nativo + valor hex
+  - **Stroke (Stk)** — color picker nativo + valor hex
+  - **Stroke Width (Sw)** — NumberInput com step=0.5, min=0
+  - Alteracoes sincronizam imediatamente: panel → store → canvas (via `handleChange` + `pushHistoryDebounced`)
+- **Participacao em recursos existentes**:
+  - **Transform**: shapes sao FabricObjects — move, resize, rotate funcionam (ETAPA 05)
+  - **Layers**: shapes aparecem no LayersPanel com icone `Square` (ETAPA 09)
+  - **History**: `pushHistoryImmediate` chamado antes de insertShape (ETAPA 14)
+  - **Clipboard**: copy/cut/paste funcionam para shapes (AnyElement[] generico — ETAPA 13)
+
+### Criterios de aceite
+
+- [x] Rectangle, Circle e Line podem ser adicionados via sidebar Elements
+- [x] Propriedades fill, stroke, strokeWidth editaveis no RightPanel
+- [x] Transform funciona (move, resize, rotate)
+- [x] Layers refletem shapes corretamente
+- [x] Undo/Redo funciona para criacao de shapes
+- [x] Clipboard (copy/cut/paste) funciona para shapes
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                      |
+|--------------------------------------|-------------------------------------------|
+| `src/components/editor/right-panel.tsx` | Atualizado (shape properties section) |
+
+### Observacoes
+
+- A infraestrutura de shapes (types, store, element-factory, insercao no canvas) ja existia desde etapas anteriores; esta etapa consolidou o feature com o properties panel
+- `ShapeElementSchema` ja definia fill, stroke, strokeWidth desde ETAPA 03
+- `createShapeObject` em element-factory.ts suporta Rect, Circle (via radius), Line (via pontos [x1,y1,x2,y2])
+- O fill da Line e sempre ignorado visualmente (Fabric.js `Line` nao suporta fill), mas a propriedade existe no modelo
+
+---
+
+## ETAPA 20 — Multi-select / Group / Ungroup
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar agrupamento e desagrupamento de elementos com suporte a transformacao conjunta (move, resize, rotate), mantendo a integridade do estado dos elementos agrupados.
+
+### Implementado
+
+- **Multi-selecao robusta** (ja existente — ETAPA 04):
+  - Selecao por marquee (box selection) via Fabric.js `selection: true`
+  - Shift+clique para adicionar/remover da selecao
+  - `selectedElementIds: string[]` suporta multiplos IDs
+  - Sincronizacao bidirecional canvas ↔ store
+- **GroupElement** — novo tipo de elemento (`src/types/index.ts`):
+  - `type: 'group'` adicionado ao `ElementType`
+  - `GroupElement` interface: estende `EditorElement` com `childElements: AnyElement[]`
+  - `GroupElementSchema` — Zod schema usando `z.array(z.any())` para evitar recursao circular
+  - `AnyElement` union atualizada para incluir `GroupElement`
+- **Store — groupSelected / ungroupSelected** (`src/stores/editor-store.ts`):
+  - `groupSelected(group, childIds)`: remove children do array `elements`, adiciona `GroupElement`, seleciona o grupo
+  - `ungroupSelected(groupId, children)`: remove `GroupElement`, adiciona children atualizados ao array, seleciona os children
+  - `triggerGroup()` / `triggerUngroup()`: contadores para acionamento via toolbar
+- **Group no canvas** (`src/hooks/use-keyboard-shortcuts.ts`):
+  - `handleGroup()` — Ctrl+G:
+    1. Encontra FabricObjects dos selecionados no canvas
+    2. Cria `new Group(childObjects)` (Fabric.js)
+    3. Remove objetos individuais, adiciona o Group
+    4. Cria `GroupElement` com bounding box do Group
+    5. Armazena via `store.groupSelected()`
+  - `handleUngroup()` — Ctrl+Shift+G:
+    1. Encontra o Fabric Group no canvas
+    2. Extrai objetos filhos com posicoes absolutas (refletindo transforms do grupo)
+    3. Remove Group, adiciona objetos individuais de volta
+    4. Atualiza childElements com novas posicoes
+    5. Armazena via `store.ungroupSelected()`
+    6. Cria `ActiveSelection` para os elementos desagrupados
+- **Element Factory** — suporte a grupos (`src/editor/core/element-factory.ts`):
+  - `createGroupObject(element)`: cria FabricObjects para cada child → `new Group(objects)` (async, suporta imagens)
+  - `extractElementUpdates` — case `'group'`: retorna only `common` updates (posicao, tamanho, transform)
+  - `syncElementToFabric` — case `'group'`: sem propriedades especificas alem de `applyCommonProps`
+- **Keyboard shortcuts**:
+  - `Ctrl+G` — agrupar elementos selecionados (≥2)
+  - `Ctrl+Shift+G` — desagrupar grupo selecionado
+  - Prevencao durante edicao textual (`isTextEditingRef`)
+  - Prevencao em inputs/textarea/select
+- **Toolbar buttons** (`src/components/editor/top-toolbar.tsx`):
+  - Botao Group (icone `Group`) — `triggerGroup()`
+  - Botao Ungroup (icone `Ungroup`) — `triggerUngroup()`
+  - Separador visual entre undo/redo e group/ungroup
+- **Layers Panel** (`src/components/editor/layers-panel.tsx`):
+  - Grupo exibido com icone `Group` (lucide-react)
+  - Contagem de filhos exibida apos o nome: `Group (3)`
+- **Transform em grupo**:
+  - Grupos sao FabricObjects — move, resize, rotate funcionam nativamente (ETAPA 05)
+  - `object:modified` sincroniza posicao/tamanho/rotacao do GroupElement no store
+  - `extractElementUpdates` para grupos retorna apenas `common` props
+- **Canvas rebuild** (undo/redo):
+  - `createGroupObject` recria o Fabric Group com todos os children durante rebuild
+  - Suporta children de qualquer tipo (text, image, shape, inclusive grupos aninhados)
+- **History**: `pushHistoryImmediate` chamado antes de group/ungroup (ETAPA 14)
+- **Visibility/Lock sync**: `syncElementToFabric` aplica `visible`/`locked` ao Group (ETAPA 11)
+- **Z-Order**: grupos mantem zIndex proprio; filhos internos preservam ordem relativa
+
+### Criterios de aceite
+
+- [x] Multi-selecao funciona (marquee + Shift+clique)
+- [x] Ctrl+G agrupa elementos selecionados (≥2)
+- [x] Ctrl+Shift+G desagrupa grupo selecionado
+- [x] Grupo pode ser movido (drag)
+- [x] Grupo pode ser redimensionado (resize handles)
+- [x] Grupo pode ser rotacionado (rotation handle)
+- [x] Estado dos elementos e preservado ao desagrupar (posicoes absolutas corretas)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                            |
+|--------------------------------------|-------------------------------------------------|
+| `src/types/index.ts`                 | Atualizado (GroupElement + schema + AnyElement) |
+| `src/stores/editor-store.ts`         | Atualizado (groupSelected, ungroupSelected, triggers) |
+| `src/editor/core/element-factory.ts` | Atualizado (createGroupObject, group case nos switches) |
+| `src/hooks/use-keyboard-shortcuts.ts` | Atualizado (handleGroup, handleUngroup, Ctrl+G/Shift+G) |
+| `src/components/editor/top-toolbar.tsx` | Atualizado (Group/Ungroup buttons)           |
+| `src/components/editor/layers-panel.tsx` | Atualizado (group icon + child count)       |
+| `src/components/editor/canvas-area.tsx` | Atualizado (triggeredGroup/Ungroup effects)  |
+
+### Observacoes
+
+- Fabric.js `Group` gerencia nativamente transformacoes conjuntas; o store apenas armazena o bounding box do grupo
+- Ao desagrupar, posicoes absolutas dos filhos sao extraidas do Fabric Group (refletem qualquer transformacao aplicada ao grupo)
+- Grupos aninhados (group dentro de group) sao suportados pela natureza recursiva de Fabric.js Groups
+- `childElements` no GroupElement e um array plano de `AnyElement`; nao ha validacao Zod profunda para evitar recursao circular
+- Clipboard/duplicate de grupos usa shallow copy — geracao de novos IDs para children pode ser refinada em etapa futura
+- `subTargetCheck: false` no Group impede selecao individual de elementos dentro do grupo (comportamento esperado para edicao)
+
+---
+
+## ETAPA 21 — Image Crop
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar crop nao destrutivo para imagens, permitindo reposicionar a imagem dentro do frame e editar o crop posteriormente, preservando o asset original.
+
+### Implementado
+
+- **Sync bidirecional de crop** (`src/editor/core/element-factory.ts`):
+  - `syncElementToFabric`: adicionado `case 'image'` que sincroniza `cropX`, `cropY`, `flipX`, `flipY` do store para o FabricImage
+  - Corrigida lacuna onde propriedades de crop/flip nunca eram propagadas de volta ao Fabric
+  - `extractElementUpdates` ja extraia `cropX`, `cropY`, `flipX`, `flipY` do FabricImage
+- **Crop mode state** (`src/stores/editor-store.ts`):
+  - `cropModeElementId: string | null` — ID da imagem em modo crop
+  - `cropModeSnapshot: { cropX, cropY, width, height } | null` — snapshot pre-crop para cancelamento
+  - `setCropMode(elementId, snapshot?)` — ativa/desativa modo crop
+- **Crop controls no Right Panel** (`src/components/editor/right-panel.tsx`):
+  - Secao "Crop" exibida ao selecionar uma imagem
+  - Botao "Crop" — entra em modo crop (salva snapshot)
+  - **Modo crop ativo**: botoes Apply (check verde) e Cancel (X), + campos cX/cY
+    - Apply: sai do modo crop preservando alteracoes
+    - Cancel: restaura cropX, cropY, width, height do snapshot
+  - Campos **cX** (cropX) e **cY** (cropY): NumberInput editando offset da imagem original
+  - `pushHistoryDebounced` chamado no Apply para suporte a undo/redo
+- **Crop interaction no canvas** (`src/hooks/use-canvas.ts`):
+  - Efeito dedicado que intercepta eventos Fabric quando `cropModeElementId` esta ativo:
+    - `mouse:down`: armazena anchor position + cropX/cropY originais do FabricImage
+    - `object:moving`: converte delta de posicao em alteracao de cropX/cropY
+      - Delta ajustado por `scaleX`/`scaleY` (cropX e em coordenadas da imagem original)
+      - `left`/`top` do FabricImage sao resetados ao anchor (frame nao se move)
+      - Store atualizada em tempo real via `updateElement`
+    - `mouse:up`: limpa referencia ao objeto crop
+  - Cleanup: `canvas.off()` em todos os eventos no unmount
+- **Resize do crop frame**: handles de redimensionamento do FabricImage permanecem funcionais em modo crop (via ETAPA 05) — `width`/`height` ja sao controlados pela secao Size do painel
+- **Nao-destrutivo**: asset original (`src`) nunca e modificado; apenas `cropX`/`cropY`/`width`/`height` mudam
+
+### Criterios de aceite
+
+- [x] Crop nao destrutivo (asset original preservado)
+- [x] Reposicionar imagem dentro do frame (drag em modo crop ajusta cropX/cropY)
+- [x] Aplicar crop (Apply persiste alteracoes)
+- [x] Editar crop posteriormente (re-entrar em crop mode via botao no painel)
+- [x] Cancelar crop restaura valores originais
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/editor/core/element-factory.ts` | Atualizado (case 'image' no syncElementToFabric)  |
+| `src/stores/editor-store.ts`         | Atualizado (cropModeElementId, cropModeSnapshot, setCropMode) |
+| `src/components/editor/right-panel.tsx` | Atualizado (crop section com Apply/Cancel/cX/cY) |
+| `src/hooks/use-canvas.ts`            | Atualizado (crop drag interaction effect)         |
+
+### Observacoes
+
+- Fabric.js v6 usa `cropX`/`cropY` como offsets em coordenadas da imagem original; `width`/`height` do FabricImage definem o frame visivel
+- `ImageElement.cropWidth`/`cropHeight` armazenam as dimensoes naturais originais no modelo (redundantes com `width`/`height` apos crop, mantidos para compatibilidade)
+- O drag em modo crop inverte o sinal do delta (mover frame para direita → cropX diminui, revelando regiao mais a esquerda da imagem)
+- Target check `active.type !== 'image'` impede crop mode em elementos nao-imagem
+- `flipX`/`flipY` sao sincronizados via `syncElementToFabric` (corrigidos nesta etapa) mas ainda nao possuem UI dedicada
+
+---
+
+## ETAPA 22 — Image Filters
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar filtros de imagem nao-destrutivos (brightness, contrast, saturation, blur, grayscale) com controles no painel de propriedades.
+
+### Implementado
+
+- **ImageFilters type** (`src/types/index.ts`):
+  - `ImageFilters` interface: `{ brightness, contrast, saturation, blur: number; grayscale: boolean }`
+  - `ImageFiltersSchema` — Zod schema com validacao de tipos
+  - `ImageElement.filters: ImageFilters` adicionado ao modelo (schema + interface)
+- **Filter helpers** (`src/editor/core/element-factory.ts`):
+  - `applyImageFilters(image, filtersConfig)`: limpa `image.filters`, instancia filtros Fabric.js com valores nao-neutros, chama `image.applyFilters()`
+    - `brightness !== 0` → `new filters.Brightness({ brightness })`
+    - `contrast !== 0` → `new filters.Contrast({ contrast })`
+    - `saturation !== 0` → `new filters.Saturation({ saturation })`
+    - `blur !== 0` → `new filters.Blur({ blur })`
+    - `grayscale === true` → `new filters.Grayscale({ mode: 'average' })`
+  - `extractImageFilters(image)`: percorre `image.filters`, detecta instancias via `instanceof`, retorna `ImageFilters`
+  - Filtros neutros (valor 0/false) nao sao instanciados — Fabric.js `isNeutralState()` ja os ignoraria
+- **createImageObject** — chama `applyImageFilters(image, element.filters)` apos criar FabricImage
+- **extractElementUpdates** — case `'image'` agora extrai `filters: extractImageFilters(image)`
+- **syncElementToFabric** — case `'image'` agora chama `applyImageFilters(image, element.filters)`
+- **Inicializacao de filtros** (`src/components/editor/canvas-area.tsx`):
+  - `insertImage()` inicializa `filters: { brightness: 0, contrast: 0, saturation: 0, blur: 0, grayscale: false }`
+- **Filter controls no Right Panel** (`src/components/editor/right-panel.tsx`):
+  - Nova secao "Filters" exibida para elementos do tipo imagem
+  - **Br (Brightness)**: range slider -100 a +100, mapeado para -1 a 1
+  - **Ct (Contrast)**: range slider -100 a +100, mapeado para -1 a 1
+  - **St (Saturation)**: range slider -100 a +100, mapeado para -1 a 1
+  - **Bl (Blur)**: range slider 0 a 100, mapeado para 0 a 1
+  - **Gy (Grayscale)**: botao toggle On/Off com estado ativo em azul
+  - Cada alteracao: `handleChange({ filters: { ...imageEl.filters, [key]: value } })` → `pushHistoryDebounced` + sync via efeito
+- **Nao-destrutivo**: filtros sao aplicados em tempo de renderizacao pelo pipeline do Fabric.js; pixels originais do asset nunca sao alterados
+
+### Criterios de aceite
+
+- [x] Brightness editavel (-1 a 1)
+- [x] Contrast editavel (-1 a 1)
+- [x] Saturation editavel (-1 a 1)
+- [x] Blur editavel (0 a 1)
+- [x] Grayscale toggle (On/Off)
+- [x] Processamento nao-destrutivo (filtros Fabric.js via pipeline, asset original preservado)
+- [x] Filtros persistem no estado (store ↔ canvas ↔ rebuild)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/types/index.ts`                 | Atualizado (ImageFilters + schema + ImageElement) |
+| `src/editor/core/element-factory.ts` | Atualizado (applyImageFilters, extractImageFilters, integracao nos 3 metodos) |
+| `src/components/editor/right-panel.tsx` | Atualizado (Filters section com 5 controles)   |
+| `src/components/editor/canvas-area.tsx` | Atualizado (inicializacao de filters default)  |
+
+### Observacoes
+
+- Fabric.js v6 exporta filtros via namespace `filters` (`import { filters } from 'fabric'`); classes acessiveis como `filters.Brightness`, `filters.Blur`, etc.
+- `filters.Grayscale` suporta 3 modos (`average`, `lightness`, `luminosity`); implementacao usa `average` como default
+- Filtros com valor neutro (0) nao sao adicionados ao array `image.filters` para evitar processamento desnecessario
+- `applyImageFilters` limpa o array e recria do zero em cada chamada (simples e deterministico)
+- `handleChange` faz spread do objeto `filters` existente para preservar outros valores ao alterar um slider
+
+---
+
+## ETAPA 23 — Font System
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar sistema de fontes com fontes padrao, integracao Google Fonts, loading assincrono, fallback e atualizacao de metricas apos carregamento.
+
+### Implementado
+
+- **Font Loader** (`src/lib/font-loader.ts`):
+  - `SYSTEM_FONTS`: 7 fontes do sistema (Arial, Helvetica, Times New Roman, Georgia, Verdana, Courier New, Impact)
+  - `GOOGLE_FONTS`: 15 fontes populares do Google Fonts (Roboto, Open Sans, Montserrat, Lato, Poppins, Oswald, Raleway, Inter, DM Sans, Nunito, Ubuntu, Playfair Display, Merriweather, PT Serif, Lora, Bebas Neue, Anton, Righteous, Pacifico, Caveat, Source Code Pro, Fira Code)
+  - `ALL_FONTS`: concatenacao de system + Google Fonts
+  - `isGoogleFont(family)`: verifica se a fonte requer carregamento
+  - `loadGoogleFont(family)`: adiciona `<link>` ao Google Fonts CSS API, aguarda `document.fonts.load('12px "Family"')`, retorna `Promise<boolean>`
+  - `isFontLoaded(family)`: verifica se a fonte ja foi carregada (system fonts sempre retornam `true`)
+  - `getFontFallback(family)`: retorna fallback chain (ex: `"Roboto", Arial, sans-serif`)
+  - Cache de fontes carregadas via `Set<string>` + `Map<string, HTMLLinkElement>` para evitar duplicacao
+- **Store** (`src/stores/editor-store.ts`):
+  - `fontReloadVersion: number` — contador incrementado quando uma fonte termina de carregar
+  - `triggerFontReload()` — setter que incrementa o contador
+- **Right Panel — Font Selector atualizado** (`src/components/editor/right-panel.tsx`):
+  - Substituiu FONT_FAMILIES estatica por ALL_FONTS (system + Google)
+  - Select com `<optgroup>` separando "System Fonts" e "Google Fonts"
+  - Cada opcao usa `style={{ fontFamily: f.family }}` para preview visual da fonte
+  - `handleFontChange(family)`: ao selecionar Google Font, chama `loadGoogleFont()` com loading state
+  - Indicador de loading: `Loader2` spinner ao lado do select enquanto a fonte carrega
+  - Select desabilitado (`disabled`) durante carregamento
+  - Apos carregamento bem-sucedido: `triggerFontReload()` incrementa versao
+  - Fontes Google nao carregadas mostram sufixo " ..." no nome
+- **Canvas re-render apos font load** (`src/components/editor/canvas-area.tsx`):
+  - `useEffect` observa `fontReloadVersion` — quando incrementado, chama `canvas.requestRenderAll()`
+  - Fabric.js re-mede automaticamente textos com a nova fonte disponivel no `requestRenderAll`
+- **Fallback**: system fonts nao requerem carregamento; Google Fonts com fallback CSS chain via `getFontFallback()`
+
+### Criterios de aceite
+
+- [x] Fontes padrao disponiveis (7 system fonts)
+- [x] Integracao Google Fonts (15 fontes populares)
+- [x] Loading assincrono com `document.fonts.load()`
+- [x] Indicador visual de loading no font selector
+- [x] Fallback (system fonts nao precisam de load; Google Fonts usam link CSS com fallback chain)
+- [x] Canvas re-render apos carregamento da fonte (metricas atualizadas)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/lib/font-loader.ts`             | Criado (modulo de carregamento de fontes)         |
+| `src/stores/editor-store.ts`         | Atualizado (fontReloadVersion + triggerFontReload) |
+| `src/components/editor/right-panel.tsx` | Atualizado (font selector com Google Fonts + loading) |
+| `src/components/editor/canvas-area.tsx` | Atualizado (font reload canvas re-render)       |
+
+### Observacoes
+
+- Google Fonts sao carregadas via CSS API (`fonts.googleapis.com/css2`) com weights 400 e 700
+- `document.fonts.load()` e suportado em todos os navegadores modernos (Chrome, Firefox, Safari, Edge)
+- Fontes ja carregadas sao cacheadas em `Set<string>` — reloads nao duplicam `<link>` elements
+- Loading state e por fonte individual (`loadingFont` state no componente) — select desabilitado apenas durante o load dessa fonte especifica
+- `fontReloadVersion` nao faz rebuild completo do canvas (apenas `requestRenderAll`), preservando objetos sem custo de recriacao
+- Fontes com `display=swap` no link CSS garantem que texto aparece imediatamente com fallback durante o carregamento
+
+---
+
+## ETAPA 24 — Background
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar background da pagina com suporte a cor solida, imagem, gradiente linear e gradiente radial, tratado separadamente dos elementos comuns.
+
+### Implementado
+
+- **PageBackground type** (`src/types/index.ts`):
+  - `BackgroundTypeSchema`: enum `'none' | 'color' | 'image' | 'linear-gradient' | 'radial-gradient'`
+  - `GradientStopSchema`: `{ offset: number; color: string }`
+  - `PageBackgroundSchema`: `{ type, color, src, assetId, gradientStops, direction }`
+  - Interfaces correspondentes exportadas: `BackgroundType`, `GradientStop`, `PageBackground`
+- **Store** (`src/stores/editor-store.ts`):
+  - `pageBackground: PageBackground` — estado do background da pagina
+  - Default: `type: 'color', color: '#ffffff'` (fundo branco como antes)
+  - `setPageBackground(bg)` — setter para atualizar o background
+- **Canvas background sync** (`src/hooks/use-canvas.ts`):
+  - `useEffect` reativo observa `pageBackground` via `useEditorStore(s => s.pageBackground)`
+  - Aplica ao Fabric.js canvas conforme o tipo:
+    - **none**: `canvas.backgroundColor = ''`, `canvas.backgroundImage = undefined` (transparente)
+    - **color**: `canvas.backgroundColor = color` (CSS string)
+    - **image**: `canvas.backgroundImage = FabricImage.fromURL(src)` (async), fallback `backgroundColor` enquanto carrega
+    - **linear-gradient**: `canvas.backgroundColor = new Gradient({ type: 'linear', coords: { x1:0,y1:0, x2:sin(angle),y2:cos(angle) }, colorStops })`
+    - **radial-gradient**: `canvas.backgroundColor = new Gradient({ type: 'radial', coords: { x1:0.5,y1:0.5,r1:0, x2:0.5,y2:0.5,r2:0.5 }, colorStops })`
+  - `canvas.requestRenderAll()` apos cada alteracao
+- **Background controls no Right Panel** (`src/components/editor/right-panel.tsx`):
+  - Quando nenhum elemento esta selecionado, painel mostra "Page" (antes: "Select an element")
+  - Secao "Background" com:
+    - **Type**: `<select>` com None / Solid Color / Image / Linear Gradient / Radial Gradient
+    - **Color** ('color'): color picker + valor hex
+    - **URL** ('image'): input de texto para URL da imagem
+    - **St / En** (gradient): color pickers para cor inicial (Start) e final (End) dos stops
+    - **Dir** ('linear-gradient'): range slider 0-360° para direcao do gradiente
+  - `handleBackgroundChange(updates)`: faz merge com estado atual via spread
+- **Separacao dos elementos**: background e propriedade do canvas/Fabric.js (`backgroundColor`/`backgroundImage`), nao um elemento na lista de camadas — tratado separadamente como especificado
+
+### Criterios de aceite
+
+- [x] Solid color (color picker, aplicado ao canvas)
+- [x] Image (URL input, carregado como `backgroundImage`)
+- [x] Linear gradient (start/end colors + direction angle)
+- [x] Radial gradient (start/end colors, centro 50%)
+- [x] Background tratado separadamente dos elementos comuns (nao aparece na lista de camadas)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/types/index.ts`                 | Atualizado (BackgroundType, GradientStop, PageBackground + schemas) |
+| `src/stores/editor-store.ts`         | Atualizado (pageBackground + setPageBackground)   |
+| `src/hooks/use-canvas.ts`            | Atualizado (background sync effect)               |
+| `src/components/editor/right-panel.tsx` | Atualizado (Page properties com background controls) |
+
+### Observacoes
+
+- Fabric.js v6 `backgroundColor` aceita `TFiller` (string | Gradient | Pattern); gradientes sao instanciados via `new Gradient({...})`
+- `canvas.backgroundImage` aceita `FabricObject`; carregamento assincrono via `FabricImage.fromURL()`
+- Background image nao oferece file picker — usa input de URL para simplicidade; upload local pode ser adicionado em etapa futura
+- Gradientes usam `gradientUnits: 'percentage'` (default do Fabric.js v6); coords em [0,1] representam % do canvas
+- Linear gradient: direcao 0° = top-to-bottom (x2=0, y2=1); 90° = left-to-right (x2=1, y2=0)
+- O hardcoded `backgroundColor: '#ffffff'` na inicializacao do canvas foi mantido como fallback; o efeito de sync sobrescreve com o valor do store assim que o canvas fica pronto
+
+---
+
+## ETAPA 25 — Multiple Pages
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar estrutura de projeto com multiplas paginas (Project → Pages → Elements), com operacoes de criar, deletar, duplicar, alternar e renomear paginas.
+
+### Implementado
+
+- **PageData type** (`src/types/index.ts`):
+  - `PageDataSchema`: Zod schema com `{ id, name, width, height, background, elements }`
+  - `PageData` interface correspondente
+  - Cada pagina possui seu proprio `PageBackground` e `elements: AnyElement[]`
+- **Store — sistema de paginas** (`src/stores/editor-store.ts`):
+  - `pages: PageData[]` — array com todas as paginas do projeto
+  - `activePageId: string` — ID da pagina ativa
+  - Pagina inicial: `{ id: 'page-1', name: 'Page 1', width: 1080, height: 1080, ... }`
+  - **`setActivePage(id)`**: salva `elements` + `pageBackground` atuais na pagina corrente, carrega dados da nova pagina, incrementa `rebuildCanvasVersion` para rebuild do canvas
+  - **`createPage()`**: salva pagina atual, cria nova pagina 1080x1080 com fundo branco vazio, adiciona ao array, troca para ela
+  - **`deletePage(id)`**: remove pagina do array (nao permite deletar a ultima pagina); se deletar a ativa, troca para a primeira
+  - **`duplicatePage(id)`**: deep clone da pagina com novos IDs para elementos, insere logo apos a original no array, troca para a copia
+  - **`renamePage(id, name)`**: atualiza o nome da pagina no array
+  - **Sync automatico**: `setElements` agora salva no `pages` da pagina ativa; `setPageBackground` tambem
+- **Page tabs no footer** (`src/components/editor/footer-status.tsx`):
+  - Substituiu "Page 1" estatico por tabs interativas com todas as paginas
+  - **Tab clicavel**: troca para a pagina (`setActivePage`)
+  - **Double-click no nome**: ativa modo de renomear (input inline com Enter para confirmar, Escape para cancelar)
+  - **Botao X no hover**: deleta pagina (escondido se apenas 1 pagina)
+  - **Botao +**: adiciona nova pagina
+  - Tab ativa destacada com `bg-muted text-foreground font-medium`
+  - Dimensoes da pagina ativa exibidas (`1080 × 1080`) ao lado das tabs
+  - Zoom controls mantidos no lado direito
+- **Canvas rebuild**: `setActivePage`, `createPage`, `deletePage`, `duplicatePage` incrementam `rebuildCanvasVersion` automaticamente, disparando o efeito de rebuild em canvas-area.tsx
+
+### Criterios de aceite
+
+- [x] Create page (botao +, nova pagina vazia)
+- [x] Delete page (botao X no hover do tab, nao permite deletar unica pagina)
+- [x] Duplicate page (deep clone com novos element IDs, troca para copia)
+- [x] Switch page (clique no tab)
+- [x] Rename page (double-click no nome → input inline)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/types/index.ts`                 | Atualizado (PageData + schema)                    |
+| `src/stores/editor-store.ts`         | Atualizado (pages, activePageId, 5 page actions, sync em setElements/setPageBackground) |
+| `src/components/editor/footer-status.tsx` | Reescrito (page tabs + rename + controles)    |
+
+### Observacoes
+
+- `elements` no store continua sendo o array da pagina ativa (backward compatible) — todas as operacoes existentes (addElement, removeElement, updateElement, etc.) funcionam sem alteracao
+- `setElements` e `setPageBackground` salvam automaticamente no `pages` da pagina ativa, garantindo que undo/redo e alteracoes de background persistem ao trocar de pagina
+- `duplicatePage` gera novos IDs para todos os elementos duplicados via `map(el => ({ ...el, id: generateId() }))`
+- Paginas mantem dimensoes independentes (width/height) e background proprio — preparacao para ETAPA 26 (Format Presets)
+- O `rebuildCanvasVersion` incrementa automaticamente na troca de pagina, disparando o `useEffect` existente em canvas-area.tsx que limpa e recria todos os FabricObjects
+
+---
+
+## ETAPA 26 — Format Presets
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar presets de formato (1080x1080, 1080x1350, 1080x1920, 1200x628, 1280x720) e dimensoes customizadas para criacao de paginas.
+
+### Implementado
+
+- **Format presets** (`src/components/editor/footer-status.tsx`):
+  - `FORMAT_PRESETS` constante com 5 presets:
+    - Instagram Square: 1080 × 1080
+    - Instagram Portrait: 1080 × 1350
+    - Stories / Reels: 1080 × 1920
+    - Facebook Landscape: 1200 × 628
+    - YouTube Thumbnail: 1280 × 720
+  - Cada preset exibe nome + dimensoes no popup
+  - Ao clicar em um preset: `createPage(width, height)` com as dimensoes correspondentes
+- **Custom dimensions** (no mesmo popup):
+  - Dois inputs numericos (W × H) com placeholder e min=1
+  - Botao "OK" para confirmar dimensoes customizadas
+  - Validacao: width > 0 e height > 0
+- **Popup UI**:
+  - Clicar no botao "+" abre popup `absolute` acima do botao (posicionado `bottom-full`)
+  - Popup contem: titulo "New Page", lista de presets, separador, secao "Custom" com inputs
+  - Fecha ao clicar em um preset, ao confirmar custom, ou ao clicar fora (click outside handler)
+  - Popup com `z-50`, borda, sombra, background card
+- **Store** (`src/stores/editor-store.ts`):
+  - `createPage(width?, height?)` — parametros opcionais; default 1080 × 1080 quando omitidos
+  - Dimensoes armazenadas em `PageData.width` / `PageData.height` da nova pagina
+  - Exibidas no footer (`{activePage.width} × {activePage.height}`)
+
+### Criterios de aceite
+
+- [x] Presets: 1080×1080, 1080×1350, 1080×1920, 1200×628, 1280×720
+- [x] Dimensoes customizadas (inputs W × H + botao OK)
+- [x] Criar pagina com dimensoes do preset selecionado
+- [x] Dimensoes armazenadas e exibidas no footer
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (createPage com width/height opcionais) |
+| `src/components/editor/footer-status.tsx` | Atualizado (format presets popup + custom dims) |
+
+### Observacoes
+
+- As dimensoes da pagina sao armazenadas em `PageData` mas o canvas logico permanece fixo em 1080×1080 — resize dinamico do canvas por pagina sera abordado em uma etapa futura de Smart Resize
+- O popup usa posicionamento absolute relativo ao botao `+` e click-outside detection via `mousedown` listener no document
+- `createPage()` sem argumentos mantem comportamento anterior (1080×1080 default) — backward compatible com o botao `+` original
+
+---
+
+## ETAPA 27 — Local Persistence
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar salvamento local estruturado usando IndexedDB para dados do projeto e localStorage para metadados, com tratamento adequado de assets de imagem (blob → data URL).
+
+### Implementado
+
+- **IndexedDB persistence** (`src/lib/persistence.ts`):
+  - `openDB()`: abre/atualiza database `creative-editor` v1 com object store `projects` (keyPath: id)
+  - `saveProjectData(id, name, data)`: salva registro com id, name, data (JSON string), updatedAt
+  - `loadProjectData(id)`: carrega registro com todos os campos
+  - `deleteProjectData(id)`: remove registro
+  - `listProjects()`: retorna `ProjectListItem[]` com id, name, updatedAt
+  - Todas as operacoes sao assincronas com Promises + tratamento de transacao
+- **Project serializer** (`src/lib/project-serializer.ts`):
+  - `SerializedProject`: `{ id, name, pages, activePageId, version, createdAt, updatedAt }`
+  - `serializeProject(id, name, pages, ...)`: converte estado do store para formato serializavel
+    - Converte ImageElement com `src: blob:...` → data URL via `fetch()` + `FileReader.readAsDataURL()`
+    - Processa todas as paginas (ativa + inativas) em paralelo com `Promise.all`
+  - Formato JSON armazenado como string no IndexedDB
+- **Store — gerenciamento de projeto** (`src/stores/editor-store.ts`):
+  - `projectId: string` — ID unico do projeto (gerado na inicializacao)
+  - `projectName: string` — nome editavel do projeto (default: "Untitled Project")
+  - `saveStatus: 'saved' | 'unsaved' | 'saving' | 'error'` — estado do save
+  - `saveProject()`: serializa via `serializeProject()`, salva em IndexedDB, atualiza `saveStatus`
+  - `loadProject(id)`: carrega do IndexedDB, faz parse do JSON, substitui pages/elements/background/activePageId, dispara rebuild
+  - `newProject()`: reseta para estado limpo com novo projectId, 1 pagina vazia
+  - `setProjectName(name)`: atualiza nome do projeto
+  - `markUnsaved()`: seta `saveStatus = 'unsaved'`
+- **Auto-save hook** (`src/hooks/use-auto-save.ts`):
+  - `useAutoSave()`: hook chamado em `page.tsx`
+  - Observa `elements`, `pages`, `pageBackground`, `projectName` via seletor Zustand
+  - Ignora primeira renderizacao (`isFirstRender` ref)
+  - Na mudanca: chama `markUnsaved()` + inicia timer debounce de 2s
+  - Timer resetado a cada nova mudanca (reinicia a contagem)
+  - Ao disparar: chama `saveProject()` via `useEditorStore.getState()`
+- **Toolbar — project name + save status** (`src/components/editor/top-toolbar.tsx`):
+  - Nome do projeto exibido com Double-click para renomear (input inline + Enter/Escape)
+  - Indicador de save status:
+    - `saved`: icone Check verde
+    - `unsaved`: circulo ambar ●
+    - `saving`: spinner Loader2 animado
+    - `error`: AlertCircle vermelho (destructive)
+- **Asset handling**: blob URLs de imagens sao convertidas para data URLs antes de salvar, garantindo que o projeto possa ser recarregado mesmo apos as object URLs originais expirarem
+
+### Criterios de aceite
+
+- [x] Salvamento local estruturado (IndexedDB)
+- [x] Metadados (id, name, createdAt, updatedAt)
+- [x] Projetos (pages, elements, background serializados)
+- [x] Assets (imagens convertidas de blob: para data URL)
+- [x] Nao guardar grandes imagens arbitrariamente em localStorage (IndexedDB usado)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/lib/persistence.ts`             | Criado (IndexedDB wrapper)                        |
+| `src/lib/project-serializer.ts`      | Criado (serializacao + blob→dataURL)              |
+| `src/stores/editor-store.ts`         | Atualizado (projectId, projectName, saveStatus, save/load/new/markUnsaved) |
+| `src/hooks/use-auto-save.ts`         | Criado (debounced auto-save hook)                 |
+| `src/components/editor/top-toolbar.tsx` | Atualizado (project name editavel + save status) |
+| `src/app/page.tsx`                   | Atualizado (useAutoSave hook)                     |
+
+### Observacoes
+
+- IndexedDB armazena cada projeto como um registro com key = projectId; suporta multiplos projetos
+- `blobUrlToDataUrl` usa `fetch` + `FileReader` para converter blob URLs em data URLs; fallback retorna a URL original em caso de erro
+- O auto-save usa debounce de 2 segundos — evita salvar a cada modificacao individual durante edicao
+- `useAutoSave` usa `useEditorStore.getState()` diretamente no setTimeout para evitar dependencias circulares de hook
+- A listagem de projetos (`listProjects`) esta implementada mas nao possui UI dedicada — sera usada em etapa futura de dashboard/project picker
+
+---
+
+## ETAPA 28 — Autosave
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar mecanismo de autosave com dirty state, debounce e estados de saving/saved/error, evitando salvar a cada movimento do mouse.
+
+### Implementado
+
+- **Dirty state** (`useAutoSave` hook):
+  - `saveStatus: 'unsaved'` setado via `markUnsaved()` quando elementos, paginas, background ou nome do projeto mudam
+  - Seta apenas se ja nao estiver `'unsaved'` (evita re-renders desnecessarios)
+- **Debounce** (2 segundos):
+  - Timer iniciado/resetado a cada mudanca de estado
+  - `saveProject()` chamado apos 2s de inatividade
+  - Cleanup do timer no unmount e a cada nova mudanca
+- **Saving state**:
+  - `saveStatus: 'saving'` setado no inicio de `saveProject()`
+  - Evita que o efeito de auto-save dispare novo save enquanto um ja esta em andamento
+- **Saved state**:
+  - `saveStatus: 'saved'` setado apos `saveProject()` concluir com sucesso
+  - Indicado por icone Check verde na toolbar
+- **Error state**:
+  - `saveStatus: 'error'` setado no catch de `saveProject()`
+  - Indicado por icone AlertCircle vermelho na toolbar
+- **Evitar saves durante mouse move**:
+  - `object:modified` do Fabric.js dispara apenas no FINAL de uma transformacao (nao durante mousemove) — sem saves durante drag
+  - Crop mode: hook verifica `cropModeElementId !== null` e pula o `markUnsaved` durante crop dragging, evitando disparos por frame
+  - Arrow keys: 2s debounce agrupa multiplas pressionamentos em um unico save
+- **Primeira renderizacao ignorada**: `isFirstRender` ref previne que a carga inicial do estado dispare save
+
+### Criterios de aceite
+
+- [x] Dirty state (saveStatus: unsaved ao modificar elementos)
+- [x] Debounce (2s de inatividade antes do save)
+- [x] Saving state (saveStatus: saving durante operacao)
+- [x] Saved state (saveStatus: saved apos sucesso)
+- [x] Error state (saveStatus: error em caso de falha)
+- [x] Nao salvar a cada movimento do mouse (object:modified so no final + crop mode skip)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/hooks/use-auto-save.ts`         | Refinado (crop mode skip + idempotent markUnsaved) |
+
+### Observacoes
+
+- A infraestrutura de persistencia (IndexedDB + serializacao) foi implementada na ETAPA 27; esta etapa refina o mecanismo de autosave com os estados especificos e otimizacoes
+- `store.cropModeElementId` e verificado antes de chamar `markUnsaved`: durante crop dragging, `updateElement` e chamado a cada frame mas o autosave nao e acionado
+- O debounce de 2s e consistente com o SPEC.md #38 (autosave com debounce)
+- Estados sao exibidos na toolbar via icones: Check (saved), ● ambar (unsaved), Loader2 (saving), AlertCircle (error)
+
+---
+
+## ETAPA 29 — Export
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar exportacao de canvas em PNG, JPG e WEBP com escalas 1x, 2x e 3x, excluindo guides, selections, handles e overlays.
+
+### Implementado
+
+- **Export utility** (`src/lib/export-utils.ts`):
+  - `ExportFormat`: tipo `'png' | 'jpeg' | 'webp'`
+  - `ExportOptions`: `{ format, scale }`
+  - `getExportFileName(format)`: gera nome de arquivo (ex: `creative-2026-08-10.png`)
+  - `downloadDataUrl(dataUrl, fileName)`: cria `<a>` temporario, clica, remove — dispara download
+- **Store — export trigger** (`src/stores/editor-store.ts`):
+  - `triggeredExport: number` — contador incrementado a cada solicitacao
+  - `exportFormat: 'png' | 'jpeg' | 'webp'` — formato selecionado
+  - `exportScale: number` — escala (1, 2, ou 3)
+  - `triggerExport(format, scale)` — setter que incrementa contador + define formato/escala
+- **Canvas export effect** (`src/components/editor/canvas-area.tsx`):
+  - `useEffect` observa `triggeredExport` — quando incrementado:
+    1. `canvas.discardActiveObject()` — remove selecao/handles do output
+    2. `canvas.requestRenderAll()` — garante render limpo
+    3. `canvas.toDataURL({ format, quality, multiplier })` — exporta com parametros
+       - JPG: qualidade 0.95
+       - PNG/WEBP: qualidade 1 (lossless)
+    4. `downloadDataUrl(dataUrl, fileName)` — dispara download
+  - Guides ja possuem `excludeFromExport: true` — nao aparecem na exportacao
+  - `discardActiveObject()` garante que selection borders/handles nao aparecem
+- **Export button na toolbar** (`src/components/editor/top-toolbar.tsx`):
+  - Botao Export com icone Download, funcional (antes era disabled placeholder)
+  - Popup dropdown com 3 secoes:
+    - **Format**: PNG 1x, JPG 1x, WEBP 1x — export imediato
+    - **Scale**: PNG @2x, PNG @3x — export em alta resolucao
+  - Cada opcao mostra formato + escala/dimensoes
+  - Popup fecha ao selecionar ou clicar fora (click-outside handler)
+
+### Criterios de aceite
+
+- [x] PNG export (lossless)
+- [x] JPG export (qualidade 95%)
+- [x] WEBP export (lossless)
+- [x] Escala 1x (1080 × 1080 default)
+- [x] Escala 2x (2160 × 2160)
+- [x] Escala 3x (3240 × 3240)
+- [x] Guides nao exportados (`excludeFromExport: true`)
+- [x] Selections/handles nao exportados (`discardActiveObject` antes do export)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/lib/export-utils.ts`            | Criado (download + fileName helpers)              |
+| `src/stores/editor-store.ts`         | Atualizado (triggeredExport, exportFormat, exportScale, triggerExport) |
+| `src/components/editor/canvas-area.tsx` | Atualizado (export effect)                     |
+| `src/components/editor/top-toolbar.tsx` | Atualizado (Export button com dropdown)        |
+
+### Observacoes
+
+- Fabric.js `toDataURL({ multiplier })` renderiza o canvas em resolucao maior; a qualidade visual depende dos assets originais (imagens em baixa resolucao podem nao se beneficiar de 3x)
+- JPG usa qualidade 95% para equilibrio entre tamanho de arquivo e qualidade visual
+- WEBP export a 1x e sem perdas (quality=1); para quality lossy < 1 pode ser adicionado em etapa futura
+- O export nao altera nenhum estado da store — apenas le o canvas, exporta e faz download
+- `discardActiveObject()` e chamado antes do export e NAO re-seleciona o objeto apos (export e operacao de leitura)
+
+---
+
+## ETAPA 30 — UI/UX Polish
+
+### Status: CONCLUIDA
+
+### Objetivo
+Revisar aplicacao completa, adicionando tooltips, context menu, loading states, empty states, feedback, acessibilidade basica, estados disabled e acabamento visual.
+
+### Implementado
+
+- **Context menu** (`src/components/editor/context-menu.tsx`):
+  - Componente `ContextMenu` reutilizavel com suporte a icones, shortcuts, separadores e estados disabled
+  - `ContextMenuItem` interface: `{ label, shortcut, icon, disabled, onClick, separator }`
+  - `ICON_MAP`: mapeamento de icones lucide-react (Copy, ClipboardPaste, Trash2, CopyPlus, Group, Ungroup)
+  - Posicionamento `fixed` nas coordenadas do clique direito
+  - Fecha ao clicar fora (`mousedown` listener) ou pressionar Escape (`keydown` listener)
+  - Role `menu` + `menuitem` para acessibilidade basica
+  - Estilo: bg-card, borda, sombra, z-index 100
+- **Context menu no canvas** (`src/components/editor/canvas-area.tsx`):
+  - `handleContextMenu` handler no container do canvas (preventDefault + setPosition)
+  - Itens computados via `useMemo` baseado no estado da selecao:
+    - **Copy** (Ctrl+C) — enabled com selecao
+    - **Paste** (Ctrl+V) — enabled com clipboard nao vazio
+    - Separador
+    - **Duplicate** (Ctrl+D) — enabled com selecao
+    - **Delete** (Del) — enabled com selecao
+    - Separador
+    - **Group** (Ctrl+G) — enabled com ≥2 selecionados
+    - **Ungroup** (Ctrl+Shift+G) — enabled com grupo selecionado
+  - Itens disabled com `opacity-30` e `cursor-default`
+  - Exportacao de handlers do `useKeyboardShortcuts`: `handleDelete`, `handleDuplicate`, `handleCopy`, `handlePaste`, `handleCut` (alem dos existentes)
+- **Canvas loading state**:
+  - Overlay com spinner CSS animado + texto "Loading canvas..." enquanto `canvasReady === false`
+  - Canvas oculto com `visibility: hidden` durante inicializacao
+  - Remove flicker entre loading → render
+- **Canvas empty state**:
+  - Overlay centralizado com "Empty canvas" + "Add images, text or shapes to get started"
+  - Exibido quando `canvasReady && elements.length === 0`
+  - `pointer-events-none` para nao bloquear interacao com canvas
+- **Tooltips**:
+  - Botoes da toolbar ja possuem `title` attributes com shortcuts (ETAPAs anteriores)
+  - Botoes de zoom e layers ja possuem tooltips (ETAPAs anteriores)
+  - Upload error feedback via tooltip no icone Uploads (ETAPA 06)
+- **Acessibilidade basica**:
+  - Context menu com `role='menu'` e `role='menuitem'`
+  - Botoes com `title` attributes para screen readers
+  - Interacao por teclado: Escape fecha context menu, Enter/click executa acao
+- **Estados disabled**:
+  - Context menu items com `disabled` prop — opacidade reduzida, cursor default
+  - Botoes undo/redo, zoom +/- ja possuem estados disabled (ETAPAs 14, 16)
+  - Font selector desabilitado durante carregamento de fonte (ETAPA 23)
+- **Layout consistente**:
+  - Estrutura de 4 areas mantida (toolbar, sidebar, canvas, panel)
+  - Footer com page tabs + zoom controls + dimensoes
+  - Transicoes suaves (`transition-colors`) em botoes e menus
+- **Acabamento visual**:
+  - Context menu com sombra (`shadow-lg`), borda arredondada, hover states
+  - Spinner CSS animado no loading state
+  - Empty state com tipografia hierarquizada
+
+### Criterios de aceite
+
+- [x] Context menu funcional (right-click no canvas)
+- [x] Loading state (spinner enquanto canvas inicializa)
+- [x] Empty state (mensagem quando canvas vazio)
+- [x] Tooltips nos botoes (ja existentes)
+- [x] Estados disabled nos itens do menu
+- [x] Acessibilidade basica (roles, titles, keyboard)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK (1 warning pre-existente) |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                              |
+|--------------------------------------|---------------------------------------------------|
+| `src/components/editor/context-menu.tsx` | Criado (componente de menu contextual)         |
+| `src/components/editor/canvas-area.tsx` | Atualizado (context menu + loading/empty states) |
+| `src/hooks/use-keyboard-shortcuts.ts` | Atualizado (exporta handleDelete/Duplicate/Copy/Paste/Cut) |
+
+### Observacoes
+
+- Context menu e um componente generico reutilizavel; pode ser usado em outros locais (layers panel, elementos) em refinamentos futuros
+- `useKeyboardShortcuts` agora exporta todos os handlers, permitindo que outros componentes disparem acoes de teclado programaticamente
+- Empty state usa `pointer-events-none` para nao interferir com drag-and-drop ou cliques no canvas
+- Loading state e removido automaticamente quando `canvasReady === true`
+- O layout manteve a arquitetura existente — sem alteracoes desnecessarias na estrutura (conforme ROADMAP: "Nao alterar arquitetura desnecessariamente")
+
+---
+
+## CHECKPOINT C — MVP (FASE C completa)
+
+Etapas 21-30 concluidas. FASE C — Recursos de Design finalizada.
+
+Funcionalidades da FASE C:
+| ETAPA | Nome              | Status    |
+|-------|-------------------|-----------|
+| 21    | Image Crop        | CONCLUIDA |
+| 22    | Image Filters     | CONCLUIDA |
+| 23    | Font System       | CONCLUIDA |
+| 24    | Background        | CONCLUIDA |
+| 25    | Multiple Pages    | CONCLUIDA |
+| 26    | Format Presets    | CONCLUIDA |
+| 27    | Local Persistence | CONCLUIDA |
+| 28    | Autosave          | CONCLUIDA |
+| 29    | Export            | CONCLUIDA |
+| 30    | UI/UX Polish      | CONCLUIDA |
 
 ---

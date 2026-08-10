@@ -5,6 +5,7 @@ import {
   Square,
   Type,
   ImageIcon,
+  Group,
   ChevronUp,
   ChevronDown,
   ChevronsUp,
@@ -12,12 +13,13 @@ import {
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
 import { pushHistoryImmediate } from '@/editor/history/history-manager';
-import type { AnyElement } from '@/types';
+import type { AnyElement, GroupElement } from '@/types';
 
 const typeIcons: Record<string, typeof Square> = {
   text: Type,
   image: ImageIcon,
   shape: Square,
+  group: Group,
 };
 
 export function LayersPanel() {
@@ -220,6 +222,11 @@ export function LayersPanel() {
                 } ${isSelected ? 'font-medium' : ''}`}
               >
                 {el.name}
+                {el.type === 'group' && (
+                  <span className='ml-1 text-muted-foreground'>
+                    ({(el as GroupElement).childElements.length})
+                  </span>
+                )}
               </span>
 
               <span

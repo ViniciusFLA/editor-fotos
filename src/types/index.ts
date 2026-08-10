@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const ElementTypeSchema = z.enum(['text', 'image', 'shape']);
+export const ElementTypeSchema = z.enum(['text', 'image', 'shape', 'group']);
 
 export type ElementType = z.infer<typeof ElementTypeSchema>;
 
@@ -34,6 +34,14 @@ export const TextElementSchema = BaseElementSchema.extend({
   lineHeight: z.number(),
 });
 
+export const ImageFiltersSchema = z.object({
+  brightness: z.number(),
+  contrast: z.number(),
+  saturation: z.number(),
+  blur: z.number(),
+  grayscale: z.boolean(),
+});
+
 export const ImageElementSchema = BaseElementSchema.extend({
   type: z.literal('image'),
   assetId: z.string(),
@@ -44,6 +52,7 @@ export const ImageElementSchema = BaseElementSchema.extend({
   cropHeight: z.number(),
   flipX: z.boolean(),
   flipY: z.boolean(),
+  filters: ImageFiltersSchema,
 });
 
 export const ShapeTypeSchema = z.enum(['rectangle', 'circle', 'line']);
@@ -58,10 +67,16 @@ export const ShapeElementSchema = BaseElementSchema.extend({
   strokeWidth: z.number(),
 });
 
+export const GroupElementSchema = BaseElementSchema.extend({
+  type: z.literal('group'),
+  childElements: z.array(z.any()),
+});
+
 export const AnyElementSchema = z.discriminatedUnion('type', [
   TextElementSchema,
   ImageElementSchema,
   ShapeElementSchema,
+  GroupElementSchema,
 ]);
 
 export interface EditorElement {
@@ -104,6 +119,15 @@ export interface ImageElement extends EditorElement {
   cropHeight: number;
   flipX: boolean;
   flipY: boolean;
+  filters: ImageFilters;
+}
+
+export interface ImageFilters {
+  brightness: number;
+  contrast: number;
+  saturation: number;
+  blur: number;
+  grayscale: boolean;
 }
 
 export interface ShapeElement extends EditorElement {
@@ -114,7 +138,59 @@ export interface ShapeElement extends EditorElement {
   strokeWidth: number;
 }
 
-export type AnyElement = TextElement | ImageElement | ShapeElement;
+export interface GroupElement extends EditorElement {
+  type: 'group';
+  childElements: AnyElement[];
+}
+
+export const BackgroundTypeSchema = z.enum(['none', 'color', 'image', 'linear-gradient', 'radial-gradient']);
+
+export type BackgroundType = z.infer<typeof BackgroundTypeSchema>;
+
+export const GradientStopSchema = z.object({
+  offset: z.number(),
+  color: z.string(),
+});
+
+export type GradientStop = z.infer<typeof GradientStopSchema>;
+
+export const PageBackgroundSchema = z.object({
+  type: BackgroundTypeSchema,
+  color: z.string(),
+  src: z.string(),
+  assetId: z.string(),
+  gradientStops: z.array(GradientStopSchema),
+  direction: z.number(),
+});
+
+export interface PageBackground {
+  type: BackgroundType;
+  color: string;
+  src: string;
+  assetId: string;
+  gradientStops: GradientStop[];
+  direction: number;
+}
+
+export const PageDataSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  width: z.number(),
+  height: z.number(),
+  background: PageBackgroundSchema,
+  elements: z.array(z.any()),
+});
+
+export interface PageData {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  background: PageBackground;
+  elements: AnyElement[];
+}
+
+export type AnyElement = TextElement | ImageElement | ShapeElement | GroupElement;
 
 export interface EditorState {
   elements: AnyElement[];

@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { FabricImage, FabricText, FabricObject } from 'fabric';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { FabricImage, FabricText, FabricObject, Rect, Circle, Line } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
+import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
 import {
@@ -11,13 +12,12 @@ import {
   findFabricObjectById,
   createFabricObject,
 } from '@/editor/core/element-factory';
-import {
-  pushHistoryImmediate,
-  undo,
-  redo,
-} from '@/editor/history/history-manager';
+import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import { validateImageFile } from '@/lib/image-validation';
-import type { ImageElement, TextElement, AnyElement } from '@/types';
+import { downloadDataUrl, getExportFileName } from '@/lib/export-utils';
+import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
+import type { ContextMenuItem } from '@/components/editor/context-menu';
+import type { ImageElement, TextElement, ShapeElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
@@ -45,6 +45,14 @@ export function CanvasArea() {
   const rebuildCanvasVersion = useEditorStore((s) => s.rebuildCanvasVersion);
   const triggeredUndo = useEditorStore((s) => s.triggeredUndo);
   const triggeredRedo = useEditorStore((s) => s.triggeredRedo);
+  const triggeredShapeAdd = useEditorStore((s) => s.triggeredShapeAdd);
+  const pendingShapeType = useEditorStore((s) => s.pendingShapeType);
+  const triggeredGroup = useEditorStore((s) => s.triggeredGroup);
+  const triggeredUngroup = useEditorStore((s) => s.triggeredUngroup);
+  const fontReloadVersion = useEditorStore((s) => s.fontReloadVersion);
+  const triggeredExport = useEditorStore((s) => s.triggeredExport);
+  const exportFormat = useEditorStore((s) => s.exportFormat);
+  const exportScale = useEditorStore((s) => s.exportScale);
 
   const insertImage = useCallback(
     async (src: string) => {
@@ -113,6 +121,13 @@ export function CanvasArea() {
           cropHeight: naturalH,
           flipX: false,
           flipY: false,
+          filters: {
+            brightness: 0,
+            contrast: 0,
+            saturation: 0,
+            blur: 0,
+            grayscale: false,
+          },
         };
 
         useEditorStore.getState().addElement(imageElement);
@@ -198,11 +213,119 @@ export function CanvasArea() {
     useEditorStore.getState().addElement(textElement);
   }, [canvasInstanceRef]);
 
+  const insertShape = useCallback(
+    (shapeType: ShapeElement['shapeType']) => {
+      const canvas = canvasInstanceRef.current;
+      if (!canvas) return;
+
+      pushHistoryImmediate(useEditorStore.getState().elements);
+
+      const id = generateId();
+
+      const nextZIndex =
+        Math.max(
+          0,
+          ...useEditorStore.getState().elements.map((el) => el.zIndex),
+        ) + 1;
+
+      const defaults = {
+        x: LOGICAL_WIDTH / 2 - 100,
+        y: LOGICAL_HEIGHT / 2 - 100,
+        width: 200,
+        height: 200,
+        scaleX: 1,
+        scaleY: 1,
+        rotation: 0,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        zIndex: nextZIndex,
+      };
+
+      const shapeElement: ShapeElement = {
+        id,
+        type: 'shape',
+        name: shapeType.charAt(0).toUpperCase() + shapeType.slice(1),
+        ...defaults,
+        shapeType,
+        fill: 'transparent',
+        stroke: '#3b82f6',
+        strokeWidth: 2,
+      };
+
+      let fabricObj: Rect | Circle | Line;
+
+      const common = {
+        left: shapeElement.x,
+        top: shapeElement.y,
+        angle: shapeElement.rotation,
+        opacity: shapeElement.opacity,
+        visible: shapeElement.visible,
+        fill: shapeElement.fill,
+        stroke: shapeElement.stroke,
+        strokeWidth: shapeElement.strokeWidth,
+      };
+
+      switch (shapeType) {
+        case 'rectangle':
+          fabricObj = new Rect({
+            ...common,
+            width: shapeElement.width,
+            height: shapeElement.height,
+          });
+          break;
+        case 'circle': {
+          const radius = Math.min(shapeElement.width, shapeElement.height) / 2;
+          fabricObj = new Circle({
+            ...common,
+            radius,
+          });
+          break;
+        }
+        case 'line':
+          fabricObj = new Line(
+            [
+              shapeElement.x,
+              shapeElement.y,
+              shapeElement.x + shapeElement.width,
+              shapeElement.y,
+            ],
+            {
+              stroke: shapeElement.stroke,
+              strokeWidth: shapeElement.strokeWidth,
+              left: shapeElement.x,
+              top: shapeElement.y,
+              angle: shapeElement.rotation,
+              opacity: shapeElement.opacity,
+              visible: shapeElement.visible,
+            },
+          );
+          break;
+      }
+
+      setElementId(fabricObj, id);
+
+      canvas.add(fabricObj);
+      canvas.setActiveObject(fabricObj);
+      canvas.requestRenderAll();
+
+      useEditorStore.getState().addElement(shapeElement);
+    },
+    [canvasInstanceRef],
+  );
+
   useEffect(() => {
     if (!canvasReady || triggeredTextAdd === 0) return;
 
     insertText();
   }, [triggeredTextAdd, canvasReady, insertText]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredShapeAdd === 0) return;
+    if (!pendingShapeType) return;
+
+    insertShape(pendingShapeType);
+  }, [triggeredShapeAdd, canvasReady, insertShape, pendingShapeType]);
 
   useEffect(() => {
     if (rebuildCanvasVersion === 0) return;
@@ -337,102 +460,12 @@ export function CanvasArea() {
     canvas.requestRenderAll();
   }, [elementOrderKey, canvasReady, canvasInstanceRef]);
 
-  const handleDelete = useCallback(() => {
-    if (isTextEditingRef.current) return;
-
-    const canvas = canvasInstanceRef.current;
-    if (!canvas) return;
-
-    const store = useEditorStore.getState();
-    const ids = store.selectedElementIds;
-    if (ids.length === 0) return;
-
-    pushHistoryImmediate(store.elements);
-
-    ids.forEach((id) => {
-      const obj = findFabricObjectById(canvas, id);
-      if (obj) {
-        canvas.remove(obj);
-      }
+  const { handleUndo, handleRedo, handleGroup, handleUngroup, handleDelete, handleDuplicate, handlePaste } =
+    useKeyboardShortcuts({
+      canvasInstanceRef,
+      isTextEditingRef,
+      containerRef,
     });
-
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
-
-    ids.forEach((id) => store.removeElement(id));
-  }, [canvasInstanceRef, isTextEditingRef]);
-
-  const handleDuplicate = useCallback(() => {
-    if (isTextEditingRef.current) return;
-
-    const canvas = canvasInstanceRef.current;
-    if (!canvas) return;
-
-    const store = useEditorStore.getState();
-    const ids = store.selectedElementIds;
-    if (ids.length === 0) return;
-
-    pushHistoryImmediate(store.elements);
-
-    const nextZIndex =
-      Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
-
-    ids.forEach((id) => {
-      const el = store.elements.find((e) => e.id === id);
-      const originalObj = el ? findFabricObjectById(canvas, id) : undefined;
-      if (!el || !originalObj) return;
-
-      const newId = generateId();
-
-      const cloned: Record<string, unknown> = { ...el };
-      cloned.id = newId;
-      cloned.name = `${el.name} copy`;
-      cloned.x = el.x + 15;
-      cloned.y = el.y + 15;
-      cloned.zIndex = nextZIndex + ids.indexOf(id);
-
-      if (el.type === 'image') {
-        cloned.assetId = generateId();
-      }
-
-      originalObj.clone().then((clonedObj) => {
-        const fabricCloned = clonedObj as FabricObject;
-        fabricCloned.set({
-          left: el.x + 15,
-          top: el.y + 15,
-        });
-        setElementId(fabricCloned, newId);
-        canvas.add(fabricCloned);
-        canvas.requestRenderAll();
-
-        store.addElement(cloned as unknown as AnyElement);
-      });
-    });
-  }, [canvasInstanceRef, isTextEditingRef]);
-
-  const handleUndo = useCallback(() => {
-    if (isTextEditingRef.current) return;
-
-    const store = useEditorStore.getState();
-    const restored = undo(store.elements);
-    if (!restored) return;
-
-    store.setElements(restored);
-    store.setSelectedElementIds([]);
-    store.triggerRebuildCanvas();
-  }, [isTextEditingRef]);
-
-  const handleRedo = useCallback(() => {
-    if (isTextEditingRef.current) return;
-
-    const store = useEditorStore.getState();
-    const restored = redo(store.elements);
-    if (!restored) return;
-
-    store.setElements(restored);
-    store.setSelectedElementIds([]);
-    store.triggerRebuildCanvas();
-  }, [isTextEditingRef]);
 
   useEffect(() => {
     if (!canvasReady || triggeredUndo === 0) return;
@@ -444,113 +477,110 @@ export function CanvasArea() {
     handleRedo();
   }, [triggeredRedo, canvasReady, handleRedo]);
 
-  const handleCopy = useCallback(() => {
-    useEditorStore.getState().copyToClipboard();
-  }, []);
+  useEffect(() => {
+    if (!canvasReady || triggeredGroup === 0) return;
+    handleGroup();
+  }, [triggeredGroup, canvasReady, handleGroup]);
 
-  const handleCut = useCallback(() => {
-    handleCopy();
-    handleDelete();
-  }, [handleCopy, handleDelete]);
+  useEffect(() => {
+    if (!canvasReady || triggeredUngroup === 0) return;
+    handleUngroup();
+  }, [triggeredUngroup, canvasReady, handleUngroup]);
 
-  const handlePaste = useCallback(() => {
-    if (isTextEditingRef.current) return;
+  useEffect(() => {
+    if (!canvasReady || fontReloadVersion === 0) return;
 
     const canvas = canvasInstanceRef.current;
     if (!canvas) return;
 
-    const store = useEditorStore.getState();
-    const clipboard = store.clipboard;
-    if (clipboard.length === 0) return;
-
-    pushHistoryImmediate(store.elements);
-
-    const offset = store.pasteOffset * 15;
-    const nextZIndex =
-      Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
-
-    clipboard.forEach(async (el) => {
-      const newId = generateId();
-      const newEl = {
-        ...el,
-        id: newId,
-        name: el.name,
-        x: el.x + offset,
-        y: el.y + offset,
-        zIndex: nextZIndex + clipboard.indexOf(el),
-      };
-
-      if (newEl.type === 'image') {
-        (newEl as ImageElement).assetId = generateId();
-      }
-
-      const fabricObj = await createFabricObject(newEl as AnyElement);
-
-      setElementId(fabricObj, newId);
-      canvas.add(fabricObj);
-      canvas.requestRenderAll();
-      store.addElement(newEl as AnyElement);
-    });
-
-    store.incrementPasteOffset();
-  }, [canvasInstanceRef, isTextEditingRef]);
+    canvas.requestRenderAll();
+  }, [fontReloadVersion, canvasReady, canvasInstanceRef]);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
-        return;
-      }
+    if (!canvasReady || triggeredExport === 0) return;
 
-      if (isTextEditingRef.current) return;
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
 
-      const isCtrl = e.ctrlKey || e.metaKey;
+    const fmt = exportFormat === 'jpeg' ? 'jpeg' : exportFormat;
+    const quality = exportFormat === 'jpeg' ? 0.95 : 1;
 
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        handleDelete();
-        return;
-      }
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
 
-      if (isCtrl && e.key === 'd') {
-        e.preventDefault();
-        handleDuplicate();
-        return;
-      }
+    const dataUrl = canvas.toDataURL({
+      format: fmt,
+      quality,
+      multiplier: exportScale,
+    });
 
-      if (isCtrl && !e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        handleUndo();
-        return;
-      }
+    downloadDataUrl(dataUrl, getExportFileName(exportFormat));
+  }, [triggeredExport, canvasReady, exportFormat, exportScale, canvasInstanceRef]);
 
-      if (isCtrl && e.shiftKey && e.key === 'Z') {
-        e.preventDefault();
-        handleRedo();
-        return;
-      }
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
+  const selectedIds = useEditorStore((s) => s.selectedElementIds);
+  const elementCount = useEditorStore((s) => s.elements.length);
+  const clipboardItems = useEditorStore((s) => s.clipboard);
 
-      if (isCtrl && e.key === 'c') {
-        e.preventDefault();
-        handleCopy();
-        return;
-      }
+  const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
+    const hasSelection = selectedIds.length > 0;
+    const hasMultiple = selectedIds.length >= 2;
+    const isGroup = selectedIds.length === 1 &&
+      useEditorStore.getState().elements.find((e) => e.id === selectedIds[0])?.type === 'group';
+    const hasClipboard = clipboardItems.length > 0;
 
-      if (isCtrl && e.key === 'v') {
-        e.preventDefault();
-        handlePaste();
-        return;
-      }
+    return [
+      {
+        label: 'Copy',
+        shortcut: 'Ctrl+C',
+        icon: ICON_MAP.copy,
+        disabled: !hasSelection,
+        onClick: () => useEditorStore.getState().copyToClipboard(),
+      },
+      {
+        label: 'Paste',
+        shortcut: 'Ctrl+V',
+        icon: ICON_MAP.paste,
+        disabled: !hasClipboard,
+        onClick: () => handlePaste(),
+      },
+      { label: '', onClick: () => {}, separator: true },
+      {
+        label: 'Duplicate',
+        shortcut: 'Ctrl+D',
+        icon: ICON_MAP.duplicate,
+        disabled: !hasSelection,
+        onClick: () => handleDuplicate(),
+      },
+      {
+        label: 'Delete',
+        shortcut: 'Del',
+        icon: ICON_MAP.delete,
+        disabled: !hasSelection,
+        onClick: () => handleDelete(),
+      },
+      { label: '', onClick: () => {}, separator: true },
+      {
+        label: 'Group',
+        shortcut: 'Ctrl+G',
+        icon: ICON_MAP.group,
+        disabled: !hasMultiple,
+        onClick: () => handleGroup(),
+      },
+      {
+        label: 'Ungroup',
+        shortcut: 'Ctrl+Shift+G',
+        icon: ICON_MAP.ungroup,
+        disabled: !isGroup,
+        onClick: () => handleUngroup(),
+      },
+    ];
+  }, [selectedIds, clipboardItems, handlePaste, handleDuplicate, handleDelete, handleGroup, handleUngroup]);
 
-      if (isCtrl && e.key === 'x') {
-        e.preventDefault();
-        handleCut();
-        return;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleDuplicate, handleUndo, handleRedo, handleCopy, handleCut, handlePaste, isTextEditingRef]);
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY });
+  }, []);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -607,7 +637,7 @@ export function CanvasArea() {
   );
 
   return (
-    <div className='flex flex-1 bg-[#e5e5e5] overflow-hidden'>
+    <div className='flex flex-1 bg-[#e5e5e5] overflow-hidden relative'>
       <div
         ref={containerRef}
         className={`relative flex-1 overflow-hidden transition-colors ${
@@ -617,7 +647,32 @@ export function CanvasArea() {
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
+        onContextMenu={handleContextMenu}
       >
+        {!canvasReady && (
+          <div className='absolute inset-0 flex items-center justify-center bg-[#e5e5e5] z-10'>
+            <div className='flex flex-col items-center gap-2'>
+              <div className='h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground' />
+              <span className='text-[11px] text-muted-foreground'>
+                Loading canvas...
+              </span>
+            </div>
+          </div>
+        )}
+
+        {canvasReady && elementCount === 0 && (
+          <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-0'>
+            <div className='flex flex-col items-center gap-1 text-center'>
+              <span className='text-[13px] text-muted-foreground/60 font-medium'>
+                Empty canvas
+              </span>
+              <span className='text-[11px] text-muted-foreground/40'>
+                Add images, text or shapes to get started
+              </span>
+            </div>
+          </div>
+        )}
+
         <div
           className='absolute'
           style={{
@@ -630,6 +685,15 @@ export function CanvasArea() {
           <canvas ref={canvasElRef} />
         </div>
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={contextMenuItems}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </div>
   );
 }

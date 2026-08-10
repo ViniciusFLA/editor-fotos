@@ -3,6 +3,8 @@ import type {
   TextElement,
   ImageElement,
   ShapeElement,
+  GroupElement,
+  ImageFilters,
   ElementType,
 } from '@/types';
 import {
@@ -11,8 +13,10 @@ import {
   Rect,
   Circle,
   Line,
+  Group,
   FabricObject,
   Canvas,
+  filters,
 } from 'fabric';
 
 const elementIdMap = new WeakMap<FabricObject, string>();
@@ -89,6 +93,9 @@ export function createFabricObject(
   element: ShapeElement,
 ): Rect | Circle | Line;
 export function createFabricObject(
+  element: GroupElement,
+): Promise<Group>;
+export function createFabricObject(
   element: AnyElement,
 ): FabricObject | Promise<FabricObject>;
 export function createFabricObject(
@@ -101,6 +108,8 @@ export function createFabricObject(
       return createImageObject(element);
     case 'shape':
       return createShapeObject(element);
+    case 'group':
+      return createGroupObject(element);
   }
 }
 
@@ -126,6 +135,60 @@ function createTextObject(element: TextElement): FabricText {
   return text;
 }
 
+function applyImageFilters(image: FabricImage, filtersConfig: ImageFilters): void {
+  image.filters = [];
+
+  if (filtersConfig.brightness !== 0) {
+    image.filters.push(new filters.Brightness({ brightness: filtersConfig.brightness }));
+  }
+
+  if (filtersConfig.contrast !== 0) {
+    image.filters.push(new filters.Contrast({ contrast: filtersConfig.contrast }));
+  }
+
+  if (filtersConfig.saturation !== 0) {
+    image.filters.push(new filters.Saturation({ saturation: filtersConfig.saturation }));
+  }
+
+  if (filtersConfig.blur !== 0) {
+    image.filters.push(new filters.Blur({ blur: filtersConfig.blur }));
+  }
+
+  if (filtersConfig.grayscale) {
+    image.filters.push(new filters.Grayscale({ mode: 'average' }));
+  }
+
+  if (image.filters.length > 0) {
+    image.applyFilters();
+  }
+}
+
+function extractImageFilters(image: FabricImage): ImageFilters {
+  const result: ImageFilters = {
+    brightness: 0,
+    contrast: 0,
+    saturation: 0,
+    blur: 0,
+    grayscale: false,
+  };
+
+  image.filters.forEach((f) => {
+    if (f instanceof filters.Brightness) {
+      result.brightness = f.brightness;
+    } else if (f instanceof filters.Contrast) {
+      result.contrast = f.contrast;
+    } else if (f instanceof filters.Saturation) {
+      result.saturation = f.saturation;
+    } else if (f instanceof filters.Blur) {
+      result.blur = f.blur;
+    } else if (f instanceof filters.Grayscale) {
+      result.grayscale = true;
+    }
+  });
+
+  return result;
+}
+
 async function createImageObject(element: ImageElement): Promise<FabricImage> {
   const image = await FabricImage.fromURL(element.src, undefined, {
     left: element.x,
@@ -140,6 +203,9 @@ async function createImageObject(element: ImageElement): Promise<FabricImage> {
   });
 
   setElementId(image, element.id);
+
+  applyImageFilters(image, element.filters);
+
   return image;
 }
 
@@ -196,6 +262,29 @@ function createShapeObject(element: ShapeElement): Rect | Circle | Line {
   return shape;
 }
 
+async function createGroupObject(element: GroupElement): Promise<Group> {
+  const childObjects = await Promise.all(
+    element.childElements.map((child) => {
+      const obj = createFabricObject(child);
+      if (obj instanceof Promise) return obj;
+      return obj;
+    }),
+  );
+
+  const group = new Group(childObjects, {
+    left: element.x,
+    top: element.y,
+    scaleX: element.scaleX,
+    scaleY: element.scaleY,
+    angle: element.rotation,
+    opacity: element.opacity,
+    visible: element.visible,
+  });
+
+  setElementId(group, element.id);
+  return group;
+}
+
 export function extractElementUpdates(
   fabricObject: FabricObject,
   elementType: ElementType,
@@ -226,6 +315,7 @@ export function extractElementUpdates(
         cropY: (fabricObject as FabricImage).cropY,
         flipX: (fabricObject as FabricImage).flipX,
         flipY: (fabricObject as FabricImage).flipY,
+        filters: extractImageFilters(fabricObject as FabricImage),
       };
     case 'shape':
       return {
@@ -234,6 +324,8 @@ export function extractElementUpdates(
         stroke: (fabricObject as Rect | Circle).stroke as string,
         strokeWidth: (fabricObject as Rect | Circle).strokeWidth as number,
       };
+    case 'group':
+      return common;
   }
 }
 
@@ -266,6 +358,17 @@ export function syncElementToFabric(
       });
       break;
     }
+    case 'image': {
+      const image = element as ImageElement;
+      (fabricObject as FabricImage).set({
+        cropX: image.cropX,
+        cropY: image.cropY,
+        flipX: image.flipX,
+        flipY: image.flipY,
+      });
+      applyImageFilters(fabricObject as FabricImage, image.filters);
+      break;
+    }
     case 'shape': {
       const shape = element as ShapeElement;
       fabricObject.set({
@@ -273,6 +376,9 @@ export function syncElementToFabric(
         stroke: shape.stroke,
         strokeWidth: shape.strokeWidth,
       });
+      break;
+    }
+    case 'group': {
       break;
     }
   }
