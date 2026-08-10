@@ -14,8 +14,9 @@
 **ETAPA 10 — Layer Reordering** — CONCLUIDA
 **ETAPA 11 — Visibility e Lock** — CONCLUIDA
 **ETAPA 12 — Duplicate e Delete** — CONCLUIDA
+**ETAPA 13 — Clipboard** — CONCLUIDA
 
-**Proxima etapa:** ETAPA 13 — Clipboard
+**Proxima etapa:** ETAPA 14 — History / Undo / Redo
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
@@ -911,5 +912,77 @@ Implementar delete e duplicate de elementos selecionados via teclas de atalho e 
 - Offset de 15px evita sobreposicao total da copia com o original
 - Guard em inputs/textarea/select no `keydown` previne conflito com inputs do Properties Panel, color picker, etc.
 - Multi-selecao: delete remove todos os elementos selecionados; duplicate clona cada um individualmente
+
+---
+
+## ETAPA 13 — Clipboard
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar clipboard interno (Ctrl+C, Ctrl+V, Ctrl+X) com suporte a multiplos objetos, novos IDs e offset progressivo no paste.
+
+### Implementado
+
+- **Clipboard na store** (`editor-store.ts`):
+  - `clipboard: AnyElement[]` — armazena copia dos elementos selecionados
+  - `pasteOffset: number` — contador para offset progressivo (1 apos copy/cut)
+  - `copyToClipboard()` — copia elementos selecionados, reseta offset para 1
+  - `incrementPasteOffset()` — incrementa offset apos cada paste
+- **Copy** (Ctrl/Cmd+C → `handleCopy`):
+  - Chama `store.copyToClipboard()` — filtra `elements` por `selectedElementIds`
+  - Reseta `pasteOffset` para 1
+  - Nao modifica canvas
+- **Cut** (Ctrl/Cmd+X → `handleCut`):
+  - `handleCopy()` + `handleDelete()` — copia + remove originais
+  - Elementos originais removidos do canvas e da store
+  - `pasteOffset` resetado para 1
+- **Paste** (Ctrl/Cmd+V → `handlePaste`):
+  - Le `store.clipboard` — se vazio, nao faz nada
+  - Offset: `pasteOffset * 15` px em X e Y
+  - Para cada elemento no clipboard:
+    - Novo ID via `generateId()`
+    - Nome preservado (sem sufixo "copy" — clipboard ja e uma copia)
+    - Posicao: `el.x + offset`, `el.y + offset`
+    - zIndex calculado incrementalmente
+    - Imagem: novo `assetId` gerado
+    - `createFabricObject(newEl)` → assincrono (suporta imagens)
+    - `canvas.add(fabricObj)` + `store.addElement(newEl)`
+  - `store.incrementPasteOffset()` apos todos os elementos
+  - Pastes consecutivos: offset progressivo (15, 30, 45, ...)
+- **Keyboard handler**: Ctrl/Cmd+C, V, X adicionados ao handler existente
+  - Mesmo guard de `isTextEditingRef` e inputs
+  - `e.preventDefault()` em todos para evitar comportamento padrao
+
+### Criterios de aceite
+
+- [x] Ctrl/Cmd+C copia elementos selecionados para clipboard interno
+- [x] Ctrl/Cmd+V cola elementos do clipboard com novos IDs + offset
+- [x] Ctrl/Cmd+X corta elementos (copia + remove originais)
+- [x] Multiplos objetos suportados
+- [x] Copia recebe novos IDs
+- [x] Paste possui pequeno offset (15px progressivo)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                      |
+|--------------------------------------|-------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (clipboard, pasteOffset)       |
+| `src/components/editor/canvas-area.tsx` | Atualizado (copy/cut/paste handlers)   |
+
+### Observacoes
+
+- Clipboard e interno (array `AnyElement[]` na store), nao usa `navigator.clipboard`
+- `pasteOffset` incrementa a cada paste; resetado a 1 em copy/cut
+- `createFabricObject` e assincrono (suporta `FabricImage.fromURL`); `forEach(async)` usado
+- Multi-selecao: copy/cut copia todos os selecionados; paste recria todos
 
 ---

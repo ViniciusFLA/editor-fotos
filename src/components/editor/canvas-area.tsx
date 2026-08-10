@@ -5,7 +5,7 @@ import { FabricImage, FabricText, FabricObject } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
-import { setElementId, syncElementToFabric, findFabricObjectById } from '@/editor/core/element-factory';
+import { setElementId, syncElementToFabric, findFabricObjectById, createFabricObject } from '@/editor/core/element-factory';
 import { validateImageFile } from '@/lib/image-validation';
 import type { ImageElement, TextElement, AnyElement } from '@/types';
 
@@ -360,6 +360,55 @@ export function CanvasArea() {
     });
   }, [canvasInstanceRef, isTextEditingRef]);
 
+  const handleCopy = useCallback(() => {
+    useEditorStore.getState().copyToClipboard();
+  }, []);
+
+  const handleCut = useCallback(() => {
+    handleCopy();
+    handleDelete();
+  }, [handleCopy, handleDelete]);
+
+  const handlePaste = useCallback(() => {
+    if (isTextEditingRef.current) return;
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const store = useEditorStore.getState();
+    const clipboard = store.clipboard;
+    if (clipboard.length === 0) return;
+
+    const offset = store.pasteOffset * 15;
+    const nextZIndex =
+      Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
+
+    clipboard.forEach(async (el) => {
+      const newId = generateId();
+      const newEl = {
+        ...el,
+        id: newId,
+        name: el.name,
+        x: el.x + offset,
+        y: el.y + offset,
+        zIndex: nextZIndex + clipboard.indexOf(el),
+      };
+
+      if (newEl.type === 'image') {
+        (newEl as ImageElement).assetId = generateId();
+      }
+
+      const fabricObj = await createFabricObject(newEl as AnyElement);
+
+      setElementId(fabricObj, newId);
+      canvas.add(fabricObj);
+      canvas.requestRenderAll();
+      store.addElement(newEl as AnyElement);
+    });
+
+    store.incrementPasteOffset();
+  }, [canvasInstanceRef, isTextEditingRef]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
@@ -381,11 +430,29 @@ export function CanvasArea() {
         handleDuplicate();
         return;
       }
+
+      if (isCtrl && e.key === 'c') {
+        e.preventDefault();
+        handleCopy();
+        return;
+      }
+
+      if (isCtrl && e.key === 'v') {
+        e.preventDefault();
+        handlePaste();
+        return;
+      }
+
+      if (isCtrl && e.key === 'x') {
+        e.preventDefault();
+        handleCut();
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleDuplicate, isTextEditingRef]);
+  }, [handleDelete, handleDuplicate, handleCopy, handleCut, handlePaste, isTextEditingRef]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

@@ -8,6 +8,8 @@ interface EditorStore {
   uploadError: string | null;
   triggeredTextAdd: number;
   activeSidebarTab: string | null;
+  clipboard: AnyElement[];
+  pasteOffset: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -24,6 +26,9 @@ interface EditorStore {
   bringToFront: (id: string) => void;
   sendToBack: (id: string) => void;
   reorderElementsByZIndex: (orderedIds: string[]) => void;
+
+  copyToClipboard: () => void;
+  incrementPasteOffset: () => void;
 }
 
 function reorderZIndices(elements: AnyElement[], orderedIds: string[]): AnyElement[] {
@@ -48,6 +53,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   uploadError: null,
   triggeredTextAdd: 0,
   activeSidebarTab: null,
+  clipboard: [],
+  pasteOffset: 0,
 
   setElements: (elements) => set({ elements }),
 
@@ -140,4 +147,15 @@ export const useEditorStore = create<EditorStore>((set) => ({
     set((state) => ({
       elements: reorderZIndices(state.elements, orderedIds),
     })),
+
+  copyToClipboard: () =>
+    set((state) => {
+      const selected = state.elements.filter((el) =>
+        state.selectedElementIds.includes(el.id),
+      );
+      return { clipboard: selected, pasteOffset: 1 };
+    }),
+
+  incrementPasteOffset: () =>
+    set((state) => ({ pasteOffset: state.pasteOffset + 1 })),
 }));
