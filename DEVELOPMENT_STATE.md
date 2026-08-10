@@ -4,8 +4,9 @@
 
 **ETAPA 01 — Project Setup** — CONCLUIDA
 **ETAPA 02 — Canvas Engine** — CONCLUIDA
+**ETAPA 03 — Modelo de Dados dos Elementos** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 03 — Modelo de Dados dos Elementos
+**Próxima etapa:** ETAPA 04 — Seleção
 
 **Última atualização:** 2026-08-10
 
@@ -53,6 +54,7 @@ src/
       button.tsx
   editor/
     core/
++     element-factory.ts
     commands/
     history/
   hooks/
@@ -174,5 +176,64 @@ Criar a infraestrutura central do Fabric.js com inicializacao, disposal, resize 
 - Canvas logico default: 1080x1080 (Instagram Square). Sera parametrizavel em etapas futuras
 - Arquitetura de scale/zoom usa CSS transform no elemento canvas; Fabric.js mantem coordenadas logicas
 - `dispose()` e assincrono (retorna `Promise<boolean>`) — chamado no cleanup sem await (seguro no unmount)
+
+---
+
+## ETAPA 03 — Modelo de Dados dos Elementos
+
+### Status: CONCLUIDA
+
+### Objetivo
+Definir modelo tipado independente do Fabric com schemas Zod, mapeamento bidirecional entre EditorElement ↔ Fabric Object, e store como fonte unica da verdade.
+
+### Implementado
+
+- **Schemas Zod completos** (`src/types/index.ts`):
+  - `BaseElementSchema` — 15 propriedades base (id, type, name, x, y, width, height, scaleX, scaleY, rotation, opacity, visible, locked, zIndex)
+  - `TextElementSchema` — estende base com 9 campos especificos (text, fontFamily, fontSize, fontWeight, fontStyle, textAlign, fill, letterSpacing, lineHeight)
+  - `ImageElementSchema` — estende base com 8 campos (assetId, src, cropX, cropY, cropWidth, cropHeight, flipX, flipY)
+  - `ShapeElementSchema` — estende base com shapeType via `ShapeTypeSchema` + fill, stroke, strokeWidth
+  - `AnyElementSchema` — `z.discriminatedUnion('type', [...])` sem `any`
+  - `EditorStateSchema` — `z.array(AnyElementSchema)` substituindo `z.array(z.any())`
+- **Element Factory** (`src/editor/core/element-factory.ts`):
+  - `createFabricObject(element)` — overload para retorno tipado por tipo (FabricText | FabricImage | Rect | Circle | Line)
+  - `extractElementUpdates(fabricObject, elementType)` — extrai `Partial<AnyElement>` do Fabric Object
+  - `syncElementToFabric(element, fabricObject)` — aplica dados do modelo ao Fabric Object
+  - `setElementId` / `getElementId` — `WeakMap<FabricObject, string>` para rastrear ID do elemento sem poluir o objeto Fabric
+  - `applyCommonProps` — mapeamento de propriedades compartilhadas (x→left, y→top, rotation→angle, etc.)
+  - Suporte a `locked` mapeado para `lockMovementX/Y`, `lockRotation`, `lockScalingX/Y`, `selectable: false`, `evented: false`
+- **Shape factory** com suporte aos 3 tipos:
+  - `rectangle` → `Rect` com width, height, fill, stroke, strokeWidth
+  - `circle` → `Circle` com radius derivado de `Math.min(width, height) / 2`
+  - `line` → `Line` com coordenadas [x, y, x+width, y+height]
+
+### Criterios de aceite
+
+- [x] Tipagem discriminada (`AnyElement = TextElement | ImageElement | ShapeElement`)
+- [x] Sem `any` nos schemas Zod (`EditorStateSchema` usa `AnyElementSchema`)
+- [x] Elementos possuem IDs estaveis (`generateId()` em `src/utils/index.ts`)
+- [x] Fabric nao e unica fonte da verdade (store Zustand e a fonte; element-factory faz a ponte)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao     |
+|--------------------------------------|----------|
+| `src/types/index.ts`                 | Atualizado (Zod schemas completos) |
+| `src/editor/core/element-factory.ts` | Criado   |
+
+### Observacoes
+
+- `WeakMap` para ID tracking evita poluicao do FabricObject e e type-safe (sem casts para `any`)
+- `createFabricObject` tem overloads para retorno tipado; imagem e async (ETAPA 06 usara isso)
+- `syncElementToFabric` e `extractElementUpdates` serao usados em ETAPA 04 (selecao) e ETAPA 08 (properties panel)
+- `applyCommonProps` nao aplica `scaleX`/`scaleY` em TextElement (FabricText gerencia internamente)
 
 ---
