@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { Canvas, ActiveSelection } from 'fabric';
 import { getElementId, findFabricObjectById, extractElementUpdates, normalizeFabricObject } from '@/editor/core/element-factory';
+import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import { useEditorStore } from '@/stores/editor-store';
 
 interface UseCanvasOptions {
@@ -181,6 +182,8 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
         syncingFromCanvasRef.current = false;
         return;
       }
+
+      pushHistoryImmediate(store.elements);
 
       const updates = extractElementUpdates(active, element.type);
       store.updateElement(id, updates);

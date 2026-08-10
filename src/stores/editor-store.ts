@@ -10,6 +10,9 @@ interface EditorStore {
   activeSidebarTab: string | null;
   clipboard: AnyElement[];
   pasteOffset: number;
+  rebuildCanvasVersion: number;
+  triggeredUndo: number;
+  triggeredRedo: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -29,6 +32,9 @@ interface EditorStore {
 
   copyToClipboard: () => void;
   incrementPasteOffset: () => void;
+  triggerRebuildCanvas: () => void;
+  triggerUndo: () => void;
+  triggerRedo: () => void;
 }
 
 function reorderZIndices(elements: AnyElement[], orderedIds: string[]): AnyElement[] {
@@ -55,6 +61,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
   activeSidebarTab: null,
   clipboard: [],
   pasteOffset: 0,
+  rebuildCanvasVersion: 0,
+  triggeredUndo: 0,
+  triggeredRedo: 0,
 
   setElements: (elements) => set({ elements }),
 
@@ -158,4 +167,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   incrementPasteOffset: () =>
     set((state) => ({ pasteOffset: state.pasteOffset + 1 })),
+
+  triggerRebuildCanvas: () =>
+    set((state) => ({ rebuildCanvasVersion: state.rebuildCanvasVersion + 1 })),
+
+  triggerUndo: () =>
+    set((state) => ({ triggeredUndo: state.triggeredUndo + 1 })),
+
+  triggerRedo: () =>
+    set((state) => ({ triggeredRedo: state.triggeredRedo + 1 })),
 }));

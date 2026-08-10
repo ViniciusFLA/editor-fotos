@@ -2,8 +2,12 @@
 
 import { Button } from '@/components/ui/button';
 import { Undo2, Redo2, Eye } from 'lucide-react';
+import { useEditorStore } from '@/stores/editor-store';
 
 export function TopToolbar() {
+  const triggerUndo = useEditorStore((s) => s.triggerUndo);
+  const triggerRedo = useEditorStore((s) => s.triggerRedo);
+
   return (
     <header className='flex h-12 items-center justify-between border-b bg-card px-4 shrink-0'>
       <div className='flex items-center gap-3'>
@@ -13,10 +17,22 @@ export function TopToolbar() {
       </div>
 
       <div className='flex items-center gap-1'>
-        <Button variant='ghost' size='icon' className='h-8 w-8' disabled>
+        <Button
+          variant='ghost'
+          size='icon'
+          className='h-8 w-8'
+          onClick={() => triggerUndo()}
+          title='Undo (Ctrl+Z)'
+        >
           <Undo2 className='h-4 w-4' />
         </Button>
-        <Button variant='ghost' size='icon' className='h-8 w-8' disabled>
+        <Button
+          variant='ghost'
+          size='icon'
+          className='h-8 w-8'
+          onClick={() => triggerRedo()}
+          title='Redo (Ctrl+Shift+Z)'
+        >
           <Redo2 className='h-4 w-4' />
         </Button>
       </div>

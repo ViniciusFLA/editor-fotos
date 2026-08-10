@@ -11,6 +11,7 @@ import {
   ChevronsDown,
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
+import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import type { AnyElement } from '@/types';
 
 const typeIcons: Record<string, typeof Square> = {
@@ -101,6 +102,8 @@ export function LayersPanel() {
       const [removed] = newOrder.splice(fromIndex, 1);
       newOrder.splice(toIndex, 0, removed!);
 
+      pushHistoryImmediate(useEditorStore.getState().elements);
+
       reorderElementsByZIndex(newOrder.map((el) => el.id));
     },
     [reorderElementsByZIndex],
@@ -131,7 +134,11 @@ export function LayersPanel() {
 
       <div className='flex items-center justify-center gap-0.5 border-b px-1 py-0.5'>
         <button
-          onClick={() => selectedId && bringToFront(selectedId)}
+          onClick={() => {
+            if (!selectedId) return;
+            pushHistoryImmediate(useEditorStore.getState().elements);
+            bringToFront(selectedId);
+          }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
           title='Bring to Front'
@@ -139,7 +146,11 @@ export function LayersPanel() {
           <ChevronsUp className='h-3 w-3 text-muted-foreground' />
         </button>
         <button
-          onClick={() => selectedId && bringForward(selectedId)}
+          onClick={() => {
+            if (!selectedId) return;
+            pushHistoryImmediate(useEditorStore.getState().elements);
+            bringForward(selectedId);
+          }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
           title='Bring Forward'
@@ -147,7 +158,11 @@ export function LayersPanel() {
           <ChevronUp className='h-3 w-3 text-muted-foreground' />
         </button>
         <button
-          onClick={() => selectedId && sendBackward(selectedId)}
+          onClick={() => {
+            if (!selectedId) return;
+            pushHistoryImmediate(useEditorStore.getState().elements);
+            sendBackward(selectedId);
+          }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
           title='Send Backward'
@@ -155,7 +170,11 @@ export function LayersPanel() {
           <ChevronDown className='h-3 w-3 text-muted-foreground' />
         </button>
         <button
-          onClick={() => selectedId && sendToBack(selectedId)}
+          onClick={() => {
+            if (!selectedId) return;
+            pushHistoryImmediate(useEditorStore.getState().elements);
+            sendToBack(selectedId);
+          }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
           title='Send to Back'

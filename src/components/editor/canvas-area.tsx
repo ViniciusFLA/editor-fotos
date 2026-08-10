@@ -5,7 +5,17 @@ import { FabricImage, FabricText, FabricObject } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
-import { setElementId, syncElementToFabric, findFabricObjectById, createFabricObject } from '@/editor/core/element-factory';
+import {
+  setElementId,
+  syncElementToFabric,
+  findFabricObjectById,
+  createFabricObject,
+} from '@/editor/core/element-factory';
+import {
+  pushHistoryImmediate,
+  undo,
+  redo,
+} from '@/editor/history/history-manager';
 import { validateImageFile } from '@/lib/image-validation';
 import type { ImageElement, TextElement, AnyElement } from '@/types';
 
@@ -32,11 +42,16 @@ export function CanvasArea() {
   const setPendingImageSrc = useEditorStore((s) => s.setPendingImageSrc);
   const setUploadError = useEditorStore((s) => s.setUploadError);
   const triggeredTextAdd = useEditorStore((s) => s.triggeredTextAdd);
+  const rebuildCanvasVersion = useEditorStore((s) => s.rebuildCanvasVersion);
+  const triggeredUndo = useEditorStore((s) => s.triggeredUndo);
+  const triggeredRedo = useEditorStore((s) => s.triggeredRedo);
 
   const insertImage = useCallback(
     async (src: string) => {
       const canvas = canvasInstanceRef.current;
       if (!canvas) return;
+
+      pushHistoryImmediate(useEditorStore.getState().elements);
 
       try {
         const fabricImage = await FabricImage.fromURL(src);
@@ -120,6 +135,9 @@ export function CanvasArea() {
     const canvas = canvasInstanceRef.current;
     if (!canvas) return;
 
+    pushHistoryImmediate(useEditorStore.getState().elements);
+    if (!canvas) return;
+
     const id = generateId();
 
     const nextZIndex =
@@ -185,6 +203,34 @@ export function CanvasArea() {
 
     insertText();
   }, [triggeredTextAdd, canvasReady, insertText]);
+
+  useEffect(() => {
+    if (rebuildCanvasVersion === 0) return;
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady) return;
+
+    canvas.clear();
+
+    const store = useEditorStore.getState();
+
+    store.elements.forEach((el) => {
+      const fabricObj = createFabricObject(el);
+
+      if (fabricObj instanceof Promise) {
+        fabricObj.then((resolved) => {
+          setElementId(resolved, el.id);
+          canvas.add(resolved);
+          canvas.requestRenderAll();
+        });
+      } else {
+        setElementId(fabricObj, el.id);
+        canvas.add(fabricObj);
+      }
+    });
+
+    canvas.requestRenderAll();
+  }, [rebuildCanvasVersion, canvasReady, canvasInstanceRef]);
 
   const prevElementRef = useRef<string | null>(null);
 
@@ -301,6 +347,8 @@ export function CanvasArea() {
     const ids = store.selectedElementIds;
     if (ids.length === 0) return;
 
+    pushHistoryImmediate(store.elements);
+
     ids.forEach((id) => {
       const obj = findFabricObjectById(canvas, id);
       if (obj) {
@@ -323,6 +371,8 @@ export function CanvasArea() {
     const store = useEditorStore.getState();
     const ids = store.selectedElementIds;
     if (ids.length === 0) return;
+
+    pushHistoryImmediate(store.elements);
 
     const nextZIndex =
       Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
@@ -360,6 +410,40 @@ export function CanvasArea() {
     });
   }, [canvasInstanceRef, isTextEditingRef]);
 
+  const handleUndo = useCallback(() => {
+    if (isTextEditingRef.current) return;
+
+    const store = useEditorStore.getState();
+    const restored = undo(store.elements);
+    if (!restored) return;
+
+    store.setElements(restored);
+    store.setSelectedElementIds([]);
+    store.triggerRebuildCanvas();
+  }, [isTextEditingRef]);
+
+  const handleRedo = useCallback(() => {
+    if (isTextEditingRef.current) return;
+
+    const store = useEditorStore.getState();
+    const restored = redo(store.elements);
+    if (!restored) return;
+
+    store.setElements(restored);
+    store.setSelectedElementIds([]);
+    store.triggerRebuildCanvas();
+  }, [isTextEditingRef]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredUndo === 0) return;
+    handleUndo();
+  }, [triggeredUndo, canvasReady, handleUndo]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredRedo === 0) return;
+    handleRedo();
+  }, [triggeredRedo, canvasReady, handleRedo]);
+
   const handleCopy = useCallback(() => {
     useEditorStore.getState().copyToClipboard();
   }, []);
@@ -378,6 +462,8 @@ export function CanvasArea() {
     const store = useEditorStore.getState();
     const clipboard = store.clipboard;
     if (clipboard.length === 0) return;
+
+    pushHistoryImmediate(store.elements);
 
     const offset = store.pasteOffset * 15;
     const nextZIndex =
@@ -431,6 +517,18 @@ export function CanvasArea() {
         return;
       }
 
+      if (isCtrl && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        handleUndo();
+        return;
+      }
+
+      if (isCtrl && e.shiftKey && e.key === 'Z') {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
       if (isCtrl && e.key === 'c') {
         e.preventDefault();
         handleCopy();
@@ -452,7 +550,7 @@ export function CanvasArea() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleDelete, handleDuplicate, handleCopy, handleCut, handlePaste, isTextEditingRef]);
+  }, [handleDelete, handleDuplicate, handleUndo, handleRedo, handleCopy, handleCut, handlePaste, isTextEditingRef]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

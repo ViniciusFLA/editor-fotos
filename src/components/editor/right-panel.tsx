@@ -2,6 +2,7 @@
 
 import { useMemo, useCallback } from 'react';
 import { useEditorStore } from '@/stores/editor-store';
+import { pushHistoryDebounced } from '@/editor/history/history-manager';
 import type { AnyElement, TextElement } from '@/types';
 
 const FONT_FAMILIES = [
@@ -78,6 +79,7 @@ export function RightPanel() {
   const handleChange = useCallback(
     (updates: Partial<AnyElement>) => {
       if (!element) return;
+      pushHistoryDebounced(useEditorStore.getState().elements);
       updateElement(element.id, updates);
     },
     [element, updateElement],

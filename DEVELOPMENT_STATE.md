@@ -15,8 +15,9 @@
 **ETAPA 11 — Visibility e Lock** — CONCLUIDA
 **ETAPA 12 — Duplicate e Delete** — CONCLUIDA
 **ETAPA 13 — Clipboard** — CONCLUIDA
+**ETAPA 14 — History / Undo / Redo** — CONCLUIDA
 
-**Proxima etapa:** ETAPA 14 — History / Undo / Redo
+**Proxima etapa:** ETAPA 15 — Keyboard Shortcuts
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
@@ -984,5 +985,81 @@ Implementar clipboard interno (Ctrl+C, Ctrl+V, Ctrl+X) com suporte a multiplos o
 - `pasteOffset` incrementa a cada paste; resetado a 1 em copy/cut
 - `createFabricObject` e assincrono (suporta `FabricImage.fromURL`); `forEach(async)` usado
 - Multi-selecao: copy/cut copia todos os selecionados; paste recria todos
+
+---
+
+## ETAPA 14 — History / Undo / Redo
+
+### Status: CONCLUIDA
+
+### Objetivo
+Criar historico robusto com suporte a undo/redo para todas as operacoes (create, delete, move, resize, rotate, properties, reorder) sem gerar entradas excessivas durante drag ou digitacao.
+
+### Implementado
+
+- **History Manager** (`src/editor/history/history-manager.ts`):
+  - `past: AnyElement[][]` — pilha de snapshots para undo (max 50)
+  - `future: AnyElement[][]` — pilha para redo (resetada a cada nova acao)
+  - `pushHistoryImmediate(elements)` — push imediato (transforms, create, delete, reorder)
+  - `pushHistoryDebounced(elements)` — push com debounce 500ms (property panel edits)
+  - `undo(currentElements)` — retorna snapshot anterior ou null
+  - `redo(currentElements)` — retorna snapshot futuro ou null
+  - `structuredClone` para copia profunda dos elementos
+- **Snapshots em action points**:
+  - `object:modified` (use-canvas) → `pushHistoryImmediate` ANTES de `updateElement` (captura pre-transform)
+  - `insertImage` / `insertText` → push antes de adicionar ao canvas/store
+  - `handleDelete` → push antes de remover
+  - `handleDuplicate` / `handlePaste` → push antes de criar copias
+  - Reorder (toolbar + drag-drop) → push antes de `reorderElementsByZIndex`
+  - Properties panel (RightPanel) → `pushHistoryDebounced` no `handleChange` (primeira digitacao captura, subsequentes em 500ms nao criam novas entradas)
+- **Undo/Redo** (canvas-area):
+  - `handleUndo()` — `undo(store.elements)` → se snapshot, `setElements` + `triggerRebuildCanvas`
+  - `handleRedo()` — `redo(store.elements)` → se snapshot, `setElements` + `triggerRebuildCanvas`
+  - `triggeredUndo` / `triggeredRedo` no store (contadores) para toolbar buttons
+  - Efeitos `useEffect` observam contadores e chamam handlers
+- **Canvas rebuild** apos undo/redo:
+  - Efeito observa `rebuildCanvasVersion` (incrementado em undo/redo)
+  - `canvas.clear()` → itera `store.elements` → `createFabricObject(el)` (sync para text/shape, async Promise para images)
+  - `setElementId` + `canvas.add` para cada object
+- **Keyboard shortcuts**:
+  - Ctrl/Cmd+Z → `handleUndo()`
+  - Ctrl/Cmd+Shift+Z → `handleRedo()`
+  - Guard `isTextEditingRef` + inputs
+- **TopToolbar**: botao Undo (Undo2) e Redo (Redo2) funcionais com tooltip
+
+### Criterios de aceite
+
+- [x] Undo/Redo funciona para create, delete, move, resize, rotate, properties, reorder
+- [x] Ctrl/Cmd+Z e Ctrl/Cmd+Shift+Z funcionam
+- [x] Nao cria entradas durante drag (apenas `object:modified`)
+- [x] Nao cria centenas de entradas durante digitacao (debounce 500ms)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                      |
+|--------------------------------------|-------------------------------------------|
+| `src/editor/history/history-manager.ts` | Criado (modulo de historico)           |
+| `src/stores/editor-store.ts`         | Atualizado (triggers undo/redo/rebuild)   |
+| `src/hooks/use-canvas.ts`            | Atualizado (history push no object:modified) |
+| `src/components/editor/canvas-area.tsx` | Atualizado (undo/redo handlers + rebuild) |
+| `src/components/editor/right-panel.tsx` | Atualizado (debounced history push)    |
+| `src/components/editor/layers-panel.tsx` | Atualizado (history push reorder)      |
+| `src/components/editor/top-toolbar.tsx` | Atualizado (botoes undo/redo ativos)   |
+
+### Observacoes
+
+- `structuredClone` faz deep copy segura dos elementos (evita mutacoes acidentais)
+- `pushHistoryImmediate` no `object:modified` e chamado ANTES do `updateElement` — captura estado pre-transformacao
+- `pushHistoryDebounced` no properties panel: primeira mudanca cria snapshot, subsequentes em 500ms sao agrupadas
+- Canvas rebuild pos-undo/redo recria todos os FabricObjects; imagens usam Promise (assincrono)
+- `future` stack e limpa em qualquer nova acao (comportamento padrao de undo)
 
 ---
