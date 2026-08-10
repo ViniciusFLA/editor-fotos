@@ -22,6 +22,7 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
   const canvasInstanceRef = useRef<Canvas | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const syncingFromCanvasRef = useRef(false);
+  const isTextEditingRef = useRef(false);
   const [scale, setScale] = useState(1);
   const [canvasReady, setCanvasReady] = useState(false);
 
@@ -70,6 +71,27 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
       }
     };
   }, [logicalWidth, logicalHeight]);
+
+  useEffect(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const handleEditingEntered = () => {
+      isTextEditingRef.current = true;
+    };
+
+    const handleEditingExited = () => {
+      isTextEditingRef.current = false;
+    };
+
+    canvas.on('text:editing:entered', handleEditingEntered);
+    canvas.on('text:editing:exited', handleEditingExited);
+
+    return () => {
+      canvas.off('text:editing:entered', handleEditingEntered);
+      canvas.off('text:editing:exited', handleEditingExited);
+    };
+  }, [canvasReady]);
 
   useEffect(() => {
     const canvas = canvasInstanceRef.current;
@@ -216,6 +238,7 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     containerRef,
     canvasInstanceRef,
     syncingFromCanvasRef,
+    isTextEditingRef,
     scale,
     canvasReady,
   };

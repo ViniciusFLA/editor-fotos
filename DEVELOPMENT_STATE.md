@@ -13,8 +13,9 @@
 **ETAPA 09 — Layers Panel** — CONCLUIDA
 **ETAPA 10 — Layer Reordering** — CONCLUIDA
 **ETAPA 11 — Visibility e Lock** — CONCLUIDA
+**ETAPA 12 — Duplicate e Delete** — CONCLUIDA
 
-**Proxima etapa:** ETAPA 12 — Duplicate e Delete
+**Proxima etapa:** ETAPA 13 — Clipboard
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
@@ -844,5 +845,71 @@ Garantir que hide/show e lock/unlock funcionem de forma consistente entre painel
 - Antes, apenas o elemento selecionado era sincronizado ao Fabric (efeito da ETAPA 08). Agora ha um efeito separado que sincroniza visibility/lock para TODOS os elementos
 - `elementsVisibilityLock` usa formato compacto (`id:v{bool}:l{bool}`) para deteccao eficiente de mudancas
 - `applyCommonProps` ja era chamado via `syncElementToFabric`; a unica mudanca foi nos valores de `selectable`/`evented`
+
+---
+
+## ETAPA 12 — Duplicate e Delete
+
+### Status: CONCLUIDA
+
+### Objetivo
+Implementar delete e duplicate de elementos selecionados via teclas de atalho e logica de exclusao segura durante edicao textual.
+
+### Implementado
+
+- **Delete** (tecla Delete ou Backspace):
+  - `handleDelete()` — remove objetos Fabric do canvas (`canvas.remove()`) + remove elementos da store (`removeElement()`)
+  - `canvas.discardActiveObject()` para limpar selecao apos exclusao
+  - Ignora quando nao ha elementos selecionados
+- **Duplicate** (Ctrl/Cmd+D):
+  - `handleDuplicate()` — clona elementos selecionados com novos IDs
+  - Offset de +15px em X e Y na copia
+  - Nome: `{original} copy`
+  - Para ImageElement: novo `assetId` gerado
+  - Fabric: `originalObj.clone()` assincrono → `set()` offset → `canvas.add()`
+  - Store: novo elemento adicionado via `addElement()`
+- **Keyboard handler** (`useEffect` com `keydown` no `window`):
+  - Delete/Backspace → `handleDelete()`
+  - Ctrl/Cmd+D → `handleDuplicate()`
+  - Prevencao em inputs/textarea/select (`e.target instanceof HTMLInputElement`, etc.)
+  - Prevencao durante edicao textual (`isTextEditingRef.current` — ETAPA 12)
+  - `e.preventDefault()` para evitar comportamentos padrao do navegador
+- **`isTextEditingRef`** em `use-canvas.ts`:
+  - Tracking via eventos `text:editing:entered` / `text:editing:exited` do Fabric.js
+  - Exposto no retorno de `useCanvas` para uso pelo handler de teclado
+  - Garante que Delete nao exclui elemento enquanto usuario edita texto inline
+- **Remocao de listeners**: `window.removeEventListener('keydown', ...)` no cleanup
+
+### Criterios de aceite
+
+- [x] Delete funciona (tecla Delete/Backspace remove elemento selecionado do canvas + store)
+- [x] Backspace funciona (mesmo comportamento que Delete)
+- [x] Duplicate funciona (Ctrl/Cmd+D → copia com novo ID + offset 15px)
+- [x] Novo ID gerado para duplicatas (`generateId()`)
+- [x] Deslocamento da duplicata (+15px X, +15px Y)
+- [x] Atalhos iniciais (Delete, Backspace, Ctrl+D)
+- [x] Nao exclui objeto durante edicao textual (`isTextEditingRef` + guard em inputs)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                      |
+|--------------------------------------|-------------------------------------------|
+| `src/hooks/use-canvas.ts`            | Atualizado (isTextEditingRef)             |
+| `src/components/editor/canvas-area.tsx` | Atualizado (delete/duplicate + keyboard) |
+
+### Observacoes
+
+- `originalObj.clone()` e assincrono (retorna Promise); callbacks usam `.then()` para adicionar ao canvas/store
+- Offset de 15px evita sobreposicao total da copia com o original
+- Guard em inputs/textarea/select no `keydown` previne conflito com inputs do Properties Panel, color picker, etc.
+- Multi-selecao: delete remove todos os elementos selecionados; duplicate clona cada um individualmente
 
 ---

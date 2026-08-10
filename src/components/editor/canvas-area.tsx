@@ -7,7 +7,7 @@ import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
 import { setElementId, syncElementToFabric, findFabricObjectById } from '@/editor/core/element-factory';
 import { validateImageFile } from '@/lib/image-validation';
-import type { ImageElement, TextElement } from '@/types';
+import type { ImageElement, TextElement, AnyElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
@@ -20,6 +20,7 @@ export function CanvasArea() {
     containerRef,
     canvasInstanceRef,
     syncingFromCanvasRef,
+    isTextEditingRef,
     scale,
     canvasReady,
   } = useCanvas({ logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
@@ -289,6 +290,102 @@ export function CanvasArea() {
 
     canvas.requestRenderAll();
   }, [elementOrderKey, canvasReady, canvasInstanceRef]);
+
+  const handleDelete = useCallback(() => {
+    if (isTextEditingRef.current) return;
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const store = useEditorStore.getState();
+    const ids = store.selectedElementIds;
+    if (ids.length === 0) return;
+
+    ids.forEach((id) => {
+      const obj = findFabricObjectById(canvas, id);
+      if (obj) {
+        canvas.remove(obj);
+      }
+    });
+
+    canvas.discardActiveObject();
+    canvas.requestRenderAll();
+
+    ids.forEach((id) => store.removeElement(id));
+  }, [canvasInstanceRef, isTextEditingRef]);
+
+  const handleDuplicate = useCallback(() => {
+    if (isTextEditingRef.current) return;
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const store = useEditorStore.getState();
+    const ids = store.selectedElementIds;
+    if (ids.length === 0) return;
+
+    const nextZIndex =
+      Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
+
+    ids.forEach((id) => {
+      const el = store.elements.find((e) => e.id === id);
+      const originalObj = el ? findFabricObjectById(canvas, id) : undefined;
+      if (!el || !originalObj) return;
+
+      const newId = generateId();
+
+      const cloned: Record<string, unknown> = { ...el };
+      cloned.id = newId;
+      cloned.name = `${el.name} copy`;
+      cloned.x = el.x + 15;
+      cloned.y = el.y + 15;
+      cloned.zIndex = nextZIndex + ids.indexOf(id);
+
+      if (el.type === 'image') {
+        cloned.assetId = generateId();
+      }
+
+      originalObj.clone().then((clonedObj) => {
+        const fabricCloned = clonedObj as FabricObject;
+        fabricCloned.set({
+          left: el.x + 15,
+          top: el.y + 15,
+        });
+        setElementId(fabricCloned, newId);
+        canvas.add(fabricCloned);
+        canvas.requestRenderAll();
+
+        store.addElement(cloned as unknown as AnyElement);
+      });
+    });
+  }, [canvasInstanceRef, isTextEditingRef]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) {
+        return;
+      }
+
+      if (isTextEditingRef.current) return;
+
+      const isCtrl = e.ctrlKey || e.metaKey;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        handleDelete();
+        return;
+      }
+
+      if (isCtrl && e.key === 'd') {
+        e.preventDefault();
+        handleDuplicate();
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDelete, handleDuplicate, isTextEditingRef]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
