@@ -16,6 +16,8 @@
 **Proxima etapa:** CHECKPOINT A — Revisao Geral (FASE A completa)
 **Última atualização:** 2026-08-10
 
+**Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
+
 **Deploy mais recente:** Preview — 2026-08-10
 
 ---
@@ -734,5 +736,52 @@ Permitir controlar a ordem visual das camadas via drag-and-drop e botoes de reor
 - `elementOrderKey` combina IDs e zIndices em uma string para deteccao eficiente de mudancas de ordem
 - Drag-and-drop usa HTML5 nativo (sem dependencia extra); indicador visual e `border-t-2` na posicao de insercao
 - `bringForward`/`sendBackward` fazem swap de zIndex (nao incremento) para manter zIndices consistentes sem gaps
+
+---
+
+## CHECKPOINT DEPLOY — CHECKPOINT A (FASE A completa)
+
+### Status: CONCLUIDO
+
+### Tipo
+Vercel Preview Deployment apos ETAPA 10 (FASE A — Fundacao do Editor completa)
+
+### URL
+- Preview: `https://editor-fotos-8rnbnn9zq-viniciusflas-projects.vercel.app`
+- Production: `https://editor-fotos-jet.vercel.app`
+
+### Vercel Project
+`viniciusflas-projects/editor-fotos`
+
+### Validacoes pre-deploy
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### FASE A completa — Funcionalidades implementadas
+
+| ETAPA | Nome                       | Status    |
+|-------|----------------------------|-----------|
+| 01    | Project Setup              | CONCLUIDA |
+| 02    | Canvas Engine              | CONCLUIDA |
+| 03    | Modelo de Dados            | CONCLUIDA |
+| 04    | Selecao                    | CONCLUIDA |
+| 05    | Move, Resize e Rotate      | CONCLUIDA |
+| 06    | Upload e Inserção Imagens  | CONCLUIDA |
+| 07    | Text Elements              | CONCLUIDA |
+| 08    | Properties Panel           | CONCLUIDA |
+| 09    | Layers Panel               | CONCLUIDA |
+| 10    | Layer Reordering           | CONCLUIDA |
+
+### Branch
+`master` (commit `b4818b1` — ETAPA 10 — Layer Reordering)
+
+### Observacoes
+- Preview deployment requer autenticacao Vercel (protecao padrao de preview)
+- URL de producao (`editor-fotos-jet.vercel.app`) acessivel publicamente
+- Proxima: FASE B — ETAPA 11 (Visibility e Lock)
 
 ---
