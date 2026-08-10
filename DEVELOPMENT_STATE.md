@@ -10,8 +10,9 @@
 **ETAPA 06 — Upload e Inserção de Imagens** — CONCLUIDA
 **ETAPA 07 — Text Elements** — CONCLUIDA
 **ETAPA 08 — Properties Panel** — CONCLUIDA
+**ETAPA 09 — Layers Panel** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 09 — Layers Panel
+**Próxima etapa:** ETAPA 10 — Layer Reordering
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview — 2026-08-10
@@ -604,5 +605,70 @@ Permitir edicao numerica das propriedades do elemento selecionado no painel dire
 - `NumberInput` arredonda valores para 2 casas decimais (evita floats longos)
 - Range de opacity mapeia 0-100 para 0-1 internamente
 - `useMemo` filtra `selectedElement` do array `elements` para evitar re-render em mudancas de outros elementos
+
+---
+
+## ETAPA 09 — Layers Panel
+
+### Status: CONCLUIDA
+
+### Objetivo
+Criar painel funcional de camadas com lista de elementos, selecao sincronizada nos dois sentidos e controles de visibilidade/lock.
+
+### Implementado
+
+- **Novo componente `LayersPanel`** (`src/components/editor/layers-panel.tsx`):
+  - Exibe todos os elementos ordenados por `zIndex` decrescente (camada superior primeiro)
+  - Cada linha mostra: icone de tipo (Text/Image/Shape), nome truncado, visibilidade toggle, lock toggle
+  - Estado vazio: "No layers" centralizado
+  - **Clique na layer** → `setSelectedElementIds([id])` (seleciona elemento no canvas)
+  - **Selecao do canvas** → layer correspondente destacada (bidirecional via store)
+  - Layer selecionada: fundo azul (`bg-blue-50`), texto `text-blue-900`, icone `text-blue-600`, nome `font-medium`
+  - Layer invisivel: nome com `opacity-40`
+- **Toggle visibilidade** (icone olho):
+  - Visivel → olho normal com circulo
+  - Invisivel → olho riscado
+  - Ao clicar → `updateElement(id, { visible: !visible })`
+  - `stopPropagation` para nao selecionar a layer junto
+- **Toggle lock** (icone cadeado):
+  - Locked → cadeado fechado amber
+  - Unlocked → cadeado aberto cinza com hover
+  - Ao clicar → `updateElement(id, { locked: !locked })`
+  - `stopPropagation` para nao selecionar a layer junto
+- **Store**: `activeSidebarTab: string | null` + `setActiveSidebarTab`
+- **LeftSidebar**: clique no icone Layers alterna `activeSidebarTab` entre `'layers'` e `null`
+  - Tab ativo: `bg-muted` + icone `text-foreground`
+- **Page layout**: `page.tsx` convertido para `'use client'` para ler `activeSidebarTab`
+  - LayersPanel renderizado entre LeftSidebar e CanvasArea quando `activeSidebarTab === 'layers'`
+
+### Criterios de aceite
+
+- [x] Lista reflete elementos (ordenada por zIndex, atualiza com add/remove)
+- [x] Selecao sincronizada nos dois sentidos (layer → canvas, canvas → layer)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                        |
+|--------------------------------------|---------------------------------------------|
+| `src/components/editor/layers-panel.tsx` | Criado                                   |
+| `src/components/editor/left-sidebar.tsx` | Atualizado (layers toggle, active state) |
+| `src/stores/editor-store.ts`         | Atualizado (activeSidebarTab)               |
+| `src/app/page.tsx`                   | Atualizado (client component, conditional LayersPanel) |
+| `src/components/editor/index.ts`     | Atualizado (LayersPanel export)             |
+
+### Observacoes
+
+- `page.tsx` agora e client component para usar `useEditorStore`; todos os imports ja eram client components
+- `LayersPanel` usa `w-48` (192px) — mesma largura que o RightPanel para consistencia
+- Ordenacao por `zIndex` decrescente segue convencao Photoshop/Figma (camada superior = primeiro na lista)
+- Visibilidade e lock syncam para Fabric via efeito de propriedades existente na canvas-area (ETAPA 08)
 
 ---

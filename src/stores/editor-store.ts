@@ -7,6 +7,7 @@ interface EditorStore {
   pendingImageSrc: string | null;
   uploadError: string | null;
   triggeredTextAdd: number;
+  activeSidebarTab: string | null;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -16,6 +17,7 @@ interface EditorStore {
   setPendingImageSrc: (src: string | null) => void;
   setUploadError: (error: string | null) => void;
   triggerTextAdd: () => void;
+  setActiveSidebarTab: (tab: string | null) => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -24,6 +26,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   pendingImageSrc: null,
   uploadError: null,
   triggeredTextAdd: 0,
+  activeSidebarTab: null,
 
   setElements: (elements) => set({ elements }),
 
@@ -51,4 +54,6 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   triggerTextAdd: () =>
     set((state) => ({ triggeredTextAdd: state.triggeredTextAdd + 1 })),
+
+  setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
 }));

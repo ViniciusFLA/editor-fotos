@@ -28,17 +28,32 @@ export function LeftSidebar() {
   const setUploadError = useEditorStore((s) => s.setUploadError);
   const uploadError = useEditorStore((s) => s.uploadError);
   const triggerTextAdd = useEditorStore((s) => s.triggerTextAdd);
+  const activeSidebarTab = useEditorStore((s) => s.activeSidebarTab);
+  const setActiveSidebarTab = useEditorStore((s) => s.setActiveSidebarTab);
 
   const handleTabClick = useCallback(
     (tabId: string) => {
       if (tabId === 'uploads') {
         fileInputRef.current?.click();
+        setActiveSidebarTab(null);
+        return;
       }
       if (tabId === 'text') {
         triggerTextAdd();
+        setActiveSidebarTab(null);
+        return;
       }
+      if (tabId === 'layers') {
+        setActiveSidebarTab(activeSidebarTab === 'layers' ? null : 'layers');
+        return;
+      }
+      setActiveSidebarTab(null);
     },
-    [triggerTextAdd],
+    [
+      triggerTextAdd,
+      activeSidebarTab,
+      setActiveSidebarTab,
+    ],
   );
 
   const handleFileChange = useCallback(
@@ -79,20 +94,32 @@ export function LeftSidebar() {
         onChange={handleFileChange}
       />
 
-      {tabs.map((tab) => (
-        <Button
-          key={tab.id}
-          variant='ghost'
-          size='icon'
-          className='h-10 w-12 rounded-none'
-          title={uploadError && tab.id === 'uploads' ? uploadError : tab.label}
-          onClick={() => handleTabClick(tab.id)}
-        >
-          <tab.icon
-            className={`h-4 w-4 ${uploadError && tab.id === 'uploads' ? 'text-destructive' : 'text-muted-foreground'}`}
-          />
-        </Button>
-      ))}
+      {tabs.map((tab) => {
+        const isActive = activeSidebarTab === tab.id;
+
+        return (
+          <Button
+            key={tab.id}
+            variant='ghost'
+            size='icon'
+            className={`h-10 w-12 rounded-none ${isActive ? 'bg-muted' : ''}`}
+            title={
+              uploadError && tab.id === 'uploads' ? uploadError : tab.label
+            }
+            onClick={() => handleTabClick(tab.id)}
+          >
+            <tab.icon
+              className={`h-4 w-4 ${
+                uploadError && tab.id === 'uploads'
+                  ? 'text-destructive'
+                  : isActive
+                    ? 'text-foreground'
+                    : 'text-muted-foreground'
+              }`}
+            />
+          </Button>
+        );
+      })}
     </aside>
   );
 }
