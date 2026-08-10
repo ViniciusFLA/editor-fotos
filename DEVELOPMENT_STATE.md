@@ -8,8 +8,9 @@
 **ETAPA 04 — Seleção** — CONCLUIDA
 **ETAPA 05 — Move, Resize e Rotate** — CONCLUIDA
 **ETAPA 06 — Upload e Inserção de Imagens** — CONCLUIDA
+**ETAPA 07 — Text Elements** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 07 — Text Elements
+**Próxima etapa:** ETAPA 08 — Properties Panel
 **Última atualização:** 2026-08-10
 
 ---
@@ -436,5 +437,68 @@ Permitir adicionar imagens reais ao canvas via file picker e drag-and-drop, com 
 - Imagens sao dimensionadas para caber em 70% do canvas (evita overflow em canvas pequeno)
 - `zIndex` do ImageElement e calculado a partir do store, nao do Fabric.js (Fabric.js ordena por posicao no array)
 - Drag-and-drop usa `dragCounterRef` para evitar flicker em elementos aninhados
+
+---
+
+## ETAPA 07 — Text Elements
+
+### Status: CONCLUIDA
+
+### Objetivo
+Criar sistema funcional de texto com adicao, edicao inline e sincronizacao com Zustand.
+
+### Implementado
+
+- **Adicao de texto** via LeftSidebar:
+  - Clique no icone Text dispara `triggerTextAdd()` na store (contador incremental)
+  - CanvasArea observa `triggeredTextAdd` e insere novo texto
+  - Texto default: "Double-click to edit", fonte Arial 40px, alinhamento center, cor preta
+  - Posicionamento: centro do canvas (`LOGICAL_WIDTH/2`, `LOGICAL_HEIGHT/2`)
+  - `TextElement` criado com defaults e adicionado ao Zustand
+- **Edicao inline** via Fabric.js:
+  - `FabricText` criado com `editable: true` (duplo-clique para editar)
+  - `createTextObject` em `element-factory.ts` atualizado com `editable: true`
+  - Ao sair da edicao (click fora / Enter), `object:modified` dispara sync (ETAPA 05)
+  - `extractElementUpdates` captura: text, fontFamily, fontSize, fontWeight, fontStyle, textAlign, fill, letterSpacing, lineHeight
+- **Propriedades sincronizadas**:
+  - Conteudo (`text`) — alterado via inline editing
+  - Font family, fontSize, fontWeight, fontStyle, textAlign, fill — defaults com sync automatico
+  - Opacity, rotation — herdado das transformacoes (ETAPA 05)
+  - Atualizacao no Zustand via `object:modified` → `extractElementUpdates` → `updateElement`
+- **Transformacoes preservadas**:
+  - Texto pode ser movido, redimensionado e rotacionado (ETAPA 05)
+  - `normalizeFabricObject` bakeia scale em width/height apos resize
+  - `locked` respeitado (ETAPA 05)
+
+### Criterios de aceite
+
+- [x] Adicionar texto (clique Text tab → texto aparece no centro do canvas)
+- [x] Editar texto (duplo-clique → inline editing → sync ao Zustand ao sair)
+- [x] Transformacoes continuam funcionando (move, resize, rotate no texto)
+- [x] Estado persiste corretamente (`object:modified` sincroniza propriedades de texto)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                       |
+|--------------------------------------|--------------------------------------------|
+| `src/stores/editor-store.ts`         | Atualizado (triggeredTextAdd)              |
+| `src/editor/core/element-factory.ts` | Atualizado (editable: true)                |
+| `src/components/editor/left-sidebar.tsx` | Atualizado (text tab trigger)          |
+| `src/components/editor/canvas-area.tsx` | Atualizado (text insertion)             |
+
+### Observacoes
+
+- `triggeredTextAdd` usa contador (nao boolean) para suportar cliques repetidos
+- `FabricText` com `editable: true` usa o TextEditingManager interno do Fabric.js v6
+- Edicao inline funciona com duplo-clique; sai com click fora ou Enter
+- Propriedades de fonte/familia/cor ainda nao tem UI dedicada (ETAPA 08 — Properties Panel)
 
 ---

@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { FabricImage } from 'fabric';
+import { FabricImage, FabricText } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useEditorStore } from '@/stores/editor-store';
 import { generateId } from '@/utils';
 import { setElementId } from '@/editor/core/element-factory';
 import { validateImageFile } from '@/lib/image-validation';
-import type { ImageElement } from '@/types';
+import type { ImageElement, TextElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
@@ -29,6 +29,7 @@ export function CanvasArea() {
   const pendingImageSrc = useEditorStore((s) => s.pendingImageSrc);
   const setPendingImageSrc = useEditorStore((s) => s.setPendingImageSrc);
   const setUploadError = useEditorStore((s) => s.setUploadError);
+  const triggeredTextAdd = useEditorStore((s) => s.triggeredTextAdd);
 
   const insertImage = useCallback(
     async (src: string) => {
@@ -112,6 +113,76 @@ export function CanvasArea() {
     insertImage(pendingImageSrc);
     setPendingImageSrc(null);
   }, [pendingImageSrc, canvasReady, insertImage, setPendingImageSrc]);
+
+  const insertText = useCallback(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+
+    const id = generateId();
+
+    const nextZIndex =
+      Math.max(
+        0,
+        ...useEditorStore.getState().elements.map((el) => el.zIndex),
+      ) + 1;
+
+    const textElement: TextElement = {
+      id,
+      type: 'text',
+      name: 'Text',
+      x: LOGICAL_WIDTH / 2,
+      y: LOGICAL_HEIGHT / 2,
+      width: 200,
+      height: 50,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: nextZIndex,
+      text: 'Double-click to edit',
+      fontFamily: 'Arial',
+      fontSize: 40,
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      textAlign: 'center',
+      fill: '#000000',
+      letterSpacing: 0,
+      lineHeight: 1.2,
+    };
+
+    const fabricText = new FabricText(textElement.text, {
+      left: textElement.x,
+      top: textElement.y,
+      fontFamily: textElement.fontFamily,
+      fontSize: textElement.fontSize,
+      fontWeight: textElement.fontWeight as string | number,
+      fontStyle: textElement.fontStyle,
+      textAlign: textElement.textAlign,
+      fill: textElement.fill,
+      charSpacing: textElement.letterSpacing,
+      lineHeight: textElement.lineHeight,
+      angle: textElement.rotation,
+      opacity: textElement.opacity,
+      visible: textElement.visible,
+      editable: true,
+    });
+
+    setElementId(fabricText, id);
+
+    canvas.add(fabricText);
+    canvas.setActiveObject(fabricText);
+    canvas.requestRenderAll();
+
+    useEditorStore.getState().addElement(textElement);
+  }, [canvasInstanceRef]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredTextAdd === 0) return;
+
+    insertText();
+  }, [triggeredTextAdd, canvasReady, insertText]);
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();

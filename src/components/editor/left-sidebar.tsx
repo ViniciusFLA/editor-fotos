@@ -27,14 +27,18 @@ export function LeftSidebar() {
   const setPendingImageSrc = useEditorStore((s) => s.setPendingImageSrc);
   const setUploadError = useEditorStore((s) => s.setUploadError);
   const uploadError = useEditorStore((s) => s.uploadError);
+  const triggerTextAdd = useEditorStore((s) => s.triggerTextAdd);
 
   const handleTabClick = useCallback(
     (tabId: string) => {
       if (tabId === 'uploads') {
         fileInputRef.current?.click();
       }
+      if (tabId === 'text') {
+        triggerTextAdd();
+      }
     },
-    [],
+    [triggerTextAdd],
   );
 
   const handleFileChange = useCallback(

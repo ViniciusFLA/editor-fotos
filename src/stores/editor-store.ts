@@ -6,6 +6,7 @@ interface EditorStore {
   selectedElementIds: string[];
   pendingImageSrc: string | null;
   uploadError: string | null;
+  triggeredTextAdd: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -14,6 +15,7 @@ interface EditorStore {
   setSelectedElementIds: (ids: string[]) => void;
   setPendingImageSrc: (src: string | null) => void;
   setUploadError: (error: string | null) => void;
+  triggerTextAdd: () => void;
 }
 
 export const useEditorStore = create<EditorStore>((set) => ({
@@ -21,6 +23,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   selectedElementIds: [],
   pendingImageSrc: null,
   uploadError: null,
+  triggeredTextAdd: 0,
 
   setElements: (elements) => set({ elements }),
 
@@ -45,4 +48,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   setPendingImageSrc: (src) => set({ pendingImageSrc: src }),
 
   setUploadError: (error) => set({ uploadError: error }),
+
+  triggerTextAdd: () =>
+    set((state) => ({ triggeredTextAdd: state.triggeredTextAdd + 1 })),
 }));

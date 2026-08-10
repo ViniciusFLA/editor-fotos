@@ -119,6 +119,7 @@ function createTextObject(element: TextElement): FabricText {
     angle: element.rotation,
     opacity: element.opacity,
     visible: element.visible,
+    editable: true,
   });
 
   setElementId(text, element.id);
