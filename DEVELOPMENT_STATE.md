@@ -12,8 +12,9 @@
 **ETAPA 08 — Properties Panel** — CONCLUIDA
 **ETAPA 09 — Layers Panel** — CONCLUIDA
 **ETAPA 10 — Layer Reordering** — CONCLUIDA
+**ETAPA 11 — Visibility e Lock** — CONCLUIDA
 
-**Proxima etapa:** CHECKPOINT A — Revisao Geral (FASE A completa)
+**Proxima etapa:** ETAPA 12 — Duplicate e Delete
 **Última atualização:** 2026-08-10
 
 **Deploy mais recente:** Preview CHECKPOINT A — 2026-08-10
@@ -783,5 +784,65 @@ Vercel Preview Deployment apos ETAPA 10 (FASE A — Fundacao do Editor completa)
 - Preview deployment requer autenticacao Vercel (protecao padrao de preview)
 - URL de producao (`editor-fotos-jet.vercel.app`) acessivel publicamente
 - Proxima: FASE B — ETAPA 11 (Visibility e Lock)
+
+---
+
+## ETAPA 11 — Visibility e Lock
+
+### Status: CONCLUIDA
+
+### Objetivo
+Garantir que hide/show e lock/unlock funcionem de forma consistente entre painel layers, canvas e estado, com sincronizacao para todos os elementos (nao apenas o selecionado) e indicadores visuais.
+
+### Implementado
+
+- **`applyCommonProps` corrigido** (`element-factory.ts`):
+  - `selectable: element.visible && !element.locked` (antes era `!element.locked`)
+  - `evented: element.visible && !element.locked` (antes era `!element.locked`)
+  - Elemento oculto nao recebe eventos de mouse nem e selecionavel no canvas
+- **Sincronizacao visibility/lock para TODOS os elementos** (novo efeito em `canvas-area.tsx`):
+  - `elementsVisibilityLock` — string derivada de `element.id:v{visible}:l{locked}` para todos os elementos
+  - `useEffect` observa mudancas e sincroniza CADA elemento ao Fabric via `syncElementToFabric`
+  - Antes, apenas o elemento selecionado era sincronizado (ETAPA 08); agora todos sao
+- **Deselecao automatica** ao ocultar/bloquear:
+  - Verifica `selectedElementIds` contra `!visible || locked`
+  - Se elemento selecionado foi oculto ou bloqueado: `canvas.discardActiveObject()`
+  - IDs invalidos removidos de `selectedElementIds` na store
+  - `syncingFromCanvasRef` previne conflito com sync de selecao
+- **Indicadores visuais no canvas**:
+  - Oculto (`visible: false`): elemento nao renderizado no canvas (Fabric.js nativo)
+  - Bloqueado (`locked: true`): sem handles de selecao, sem transformacao (via Fabric lock props)
+  - Nao selecionavel, nao recebe eventos
+- **Indicadores visuais no LayersPanel** (herdado ETAPA 09):
+  - Oculto: nome com `opacity-40` + icone olho riscado
+  - Bloqueado: icone cadeado fechado amber
+
+### Criterio de aceite
+
+- [x] Estado e comportamento permanecem sincronizados (store ↔ Fabric para todos os elementos)
+- [x] Elemento oculto: nao renderiza, nao selecionavel, deselected se estava selecionado
+- [x] Elemento bloqueado: sem handles, sem transform, deselected se estava selecionado
+- [x] Toggles no LayersPanel refletem imediatamente no canvas
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos alterados/criados
+
+| Arquivo                              | Acao                                           |
+|--------------------------------------|------------------------------------------------|
+| `src/editor/core/element-factory.ts` | Atualizado (selectable/evented com visible)    |
+| `src/components/editor/canvas-area.tsx` | Atualizado (visibility/lock sync global)    |
+
+### Observacoes
+
+- Antes, apenas o elemento selecionado era sincronizado ao Fabric (efeito da ETAPA 08). Agora ha um efeito separado que sincroniza visibility/lock para TODOS os elementos
+- `elementsVisibilityLock` usa formato compacto (`id:v{bool}:l{bool}`) para deteccao eficiente de mudancas
+- `applyCommonProps` ja era chamado via `syncElementToFabric`; a unica mudanca foi nos valores de `selectable`/`evented`
 
 ---

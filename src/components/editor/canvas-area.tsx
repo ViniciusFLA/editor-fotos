@@ -221,6 +221,46 @@ export function CanvasArea() {
     canvas.requestRenderAll();
   }, [selectedElement, canvasReady, canvasInstanceRef, syncingFromCanvasRef]);
 
+  const elementsVisibilityLock = useEditorStore((s) =>
+    s.elements.map((el) => `${el.id}:v${el.visible}:l${el.locked}`).join(','),
+  );
+
+  useEffect(() => {
+    if (syncingFromCanvasRef.current) return;
+
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady) return;
+
+    const store = useEditorStore.getState();
+    let hasBlockedSelected = false;
+
+    store.elements.forEach((el) => {
+      const obj = findFabricObjectById(canvas, el.id);
+      if (!obj) return;
+
+      if (obj.visible !== el.visible || obj.selectable === el.locked) {
+        syncElementToFabric(el, obj);
+      }
+
+      if (store.selectedElementIds.includes(el.id) && (!el.visible || el.locked)) {
+        hasBlockedSelected = true;
+      }
+    });
+
+    if (hasBlockedSelected) {
+      canvas.discardActiveObject();
+
+      const validIds = store.selectedElementIds.filter((id) => {
+        const el = store.elements.find((e) => e.id === id);
+        return el && el.visible && !el.locked;
+      });
+
+      store.setSelectedElementIds(validIds);
+    }
+
+    canvas.requestRenderAll();
+  }, [elementsVisibilityLock, canvasReady, canvasInstanceRef, syncingFromCanvasRef]);
+
   const elementOrderKey = useEditorStore(
     (s) => s.elements.map((el) => el.id).join(',') + '|' + s.elements.map((el) => el.zIndex).join(','),
   );

@@ -44,8 +44,8 @@ function applyCommonProps(
     lockRotation: element.locked,
     lockScalingX: element.locked,
     lockScalingY: element.locked,
-    selectable: !element.locked,
-    evented: !element.locked,
+    selectable: element.visible && !element.locked,
+    evented: element.visible && !element.locked,
   });
 }
 
