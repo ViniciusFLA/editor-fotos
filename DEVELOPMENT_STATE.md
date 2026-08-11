@@ -33,11 +33,14 @@
 **ETAPA 29 — Export** — CONCLUIDA
 **ETAPA 30 — UI/UX Polish** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 31 — AI Provider Architecture (FASE D)
+**ETAPA 32 — OCR Provider** — CONCLUIDA
+
+**Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
 **Última atualização:** 2026-08-11
 
-**Deploy mais recente:** Preview FASE EXTRAORDINARIA Usability + I18N — 2026-08-11
-**Preview URL:** https://editor-fotos-28egr4go0-viniciusflas-projects.vercel.app
+**Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
+**Preview URL:** https://editor-fotos-3wkwn1nvs-viniciusflas-projects.vercel.app
+**Commit:** 3525fff — fix: complete final post-qa cleanup — 11 resolved, 0 open
 **Commit:** c43bf80 — feat: add text editing, page deletion, and i18n (pt-BR, en, es)
 
 ### QA MVP — Status
@@ -148,18 +151,316 @@ Implementar edição real de texto, exclusão de páginas com confirmação e si
 - O nome padrao de novas paginas respeita o idioma atual, mas garantir unicidade via numeracao (Page 1, Page 2, ...)
 - Páginas existentes mantem seus nomes originais ao trocar idioma
 
-### ETAPA 31 continua NÃO INICIADA
 
 ---
-- BLOCO 1 — Persistência / Integridade de Dados (10/10)
-- BLOCO 2 — History / Undo / Redo (6/6)
-- BLOCO 3 — Groups / Pages / Clipboard (5/5)
-- BLOCO 4 — Canvas Lifecycle / Background (6/6)
-- BLOCO 5 — Element Factory / Shapes / Image Rebuild (6/6)
-- BLOCO 6 — Crop / Guides / Performance (4/4)
-- BLOCO 7 — Robustez / Polish Final (11/11)
 
-**Arquivos alterados:** 14 arquivos modificados, 1 novo (QA_REPORT_MVP.md)
+## ETAPA 31 — AI Provider Architecture
+
+### Status: CONCLUIDA
+
+**Data:** 2026-08-11
+
+### Objetivo
+Criar a camada de abstração de IA do editor — totalmente tipada, modular, vendor-agnostic e desacoplada do Fabric.js. Preparar contratos para as ETAPAS 32-45.
+
+### Implementado
+
+#### Arquitetura
+- Módulo isolado em `src/ai/` sem dependências de Fabric.js, Zustand ou componentes React
+- Camada conceitual: Editor → AI Services → Provider Interface → Vendor Implementation (futura)
+- Barrel exports via `@/ai` para consumo externo
+
+#### Tipos Compartilhados (`src/ai/types/common.ts`)
+- **BoundingBox** — coordenadas em PIXELS relativas à imagem original (não canvas/viewport)
+- **Confidence** — número 0-1 (inclusive) com schema Zod para validação de fronteira
+- **ImageInput** — blob | url | base64 (pelo menos um obrigatório), mimeType opcional
+- **GeneratedImage** — Blob + mimeType + width/height + metadata opcional
+- **AIMetadata** — Record<string, unknown> tipado (nunca `any`)
+
+#### OCR (`src/ai/types/ocr.ts`)
+- **DetectedText** — id, text, boundingBox, confidence + campos opcionais: polygon, language, approximateFontSize, approximateColor, approximateAlignment
+- **OCRInput** — ImageInput + language hint + regionsOfInterest opcionais
+- **OCRResult** — DetectedText[] + metadata
+
+#### Segmentation (`src/ai/types/segmentation.ts`)
+- **AIMask** — discriminated union: `{ kind: 'blob', data: Blob, mimeType }` | `{ kind: 'dataUrl', dataUrl: string }`
+- **SegmentedObject** — id, boundingBox, mask, confidence, label opcional
+- **SegmentationInput** — ImageInput + clickPoint opcional (magic select) + targetLabels opcionais
+- **SegmentationResult** — SegmentedObject[] + metadata
+
+#### Inpainting (`src/ai/types/inpainting.ts`)
+- **InpaintingInput** — ImageInput + AIMask
+- **InpaintingResult** — GeneratedImage + metadata
+- Mesmo provider para texto (ETAPA 35) e objetos (ETAPA 40)
+
+#### Background Removal (`src/ai/types/background-removal.ts`)
+- **BackgroundRemovalInput** — ImageInput
+- **BackgroundRemovalResult** — GeneratedImage + metadata
+
+#### Vision Analysis (`src/ai/types/vision-analysis.ts`)
+- **DetectedRegion** — id, boundingBox, label, confidence
+- **CreativeComposition** — headlines[], subheadlines[], ctas[], logos[], products[], persons[], prices[], badges[], other[]
+- **VisionAnalysisInput** — ImageInput + targetCategories opcionais
+- **VisionAnalysisResult** — CreativeComposition + DetectedRegion[] (flat)
+
+#### Error Model (`src/ai/errors/ai-error.ts`)
+- **AIProviderError** extends Error com code, provider, retryable, cause, metadata
+- **10 error codes**: INVALID_INPUT, UNSUPPORTED_INPUT, AUTHENTICATION, RATE_LIMIT, TIMEOUT, NETWORK, PROVIDER_ERROR, INVALID_RESPONSE, CANCELLED, UNKNOWN
+- Nunca expõe secrets, API keys ou raw vendor responses
+
+#### Provider Interfaces
+- **OCRProvider** — detectText(input, options?)
+- **SegmentationProvider** — segment(input, options?)
+- **InpaintingProvider** — inpaint(input, options?)
+- **BackgroundRemovalProvider** — removeBackground(input, options?)
+- **VisionAnalysisProvider** — analyze(input, options?)
+- Todos com: id, name, AbortSignal via options.signal
+- Todos retornam Promise e lançam AIProviderError
+
+#### Registry (`src/ai/providers/registry.ts`)
+- **AIProviders** — objeto simples com providers opcionais (sem service locator global)
+- **createAIProviders(providers)** — factory function
+
+#### Documentação (`src/ai/README.md`)
+- Estrutura do módulo, princípios, sistema de coordenadas, confidence, error handling, cancelamento, ownership, exemplo de uso
+
+### Critérios de aceite
+
+| # | Critério | Status |
+|---|----------|--------|
+| 1 | OCRProvider tipado | OK |
+| 2 | SegmentationProvider tipado | OK |
+| 3 | InpaintingProvider tipado | OK |
+| 4 | BackgroundRemovalProvider tipado | OK |
+| 5 | VisionAnalysisProvider tipado | OK |
+| 6 | Entradas e saídas tipadas | OK |
+| 7 | Sem `any` | OK |
+| 8 | Sem dependência de Fabric.js nos contratos | OK |
+| 9 | Sem dependência de vendor específico | OK |
+| 10 | BoundingBox com sistema de coordenadas definido (pixels, imagem original) | OK |
+| 11 | Confidence com escala definida (0-1) | OK |
+| 12 | Masks com representação tipada (discriminated union) | OK |
+| 13 | Error handling consistente | OK |
+| 14 | Cancelamento previsto (AbortSignal) | OK |
+| 15 | Providers substituíveis no futuro | OK |
+| 16 | Nenhuma API real integrada | OK |
+| 17 | Editor atual continua funcionando | OK |
+| 18 | Typecheck | OK |
+| 19 | Lint | OK |
+| 20 | Build | OK |
+
+### Arquivos criados
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `src/ai/index.ts` | Barrel exports |
+| `src/ai/README.md` | Documentação do módulo |
+| `src/ai/types/common.ts` | BoundingBox, ImageInput, GeneratedImage, Confidence, AIMetadata |
+| `src/ai/types/ocr.ts` | DetectedText, OCRInput, OCRResult |
+| `src/ai/types/segmentation.ts` | AIMask, SegmentedObject, SegmentationInput, SegmentationResult |
+| `src/ai/types/inpainting.ts` | InpaintingInput, InpaintingResult |
+| `src/ai/types/background-removal.ts` | BackgroundRemovalInput, BackgroundRemovalResult |
+| `src/ai/types/vision-analysis.ts` | DetectedRegion, CreativeComposition, VisionAnalysisInput, VisionAnalysisResult |
+| `src/ai/errors/ai-error.ts` | AIProviderError, AIErrorCode |
+| `src/ai/providers/ocr-provider.ts` | OCRProvider interface |
+| `src/ai/providers/segmentation-provider.ts` | SegmentationProvider interface |
+| `src/ai/providers/inpainting-provider.ts` | InpaintingProvider interface |
+| `src/ai/providers/background-removal-provider.ts` | BackgroundRemovalProvider interface |
+| `src/ai/providers/vision-analysis-provider.ts` | VisionAnalysisProvider interface |
+| `src/ai/providers/registry.ts` | AIProviders + createAIProviders |
+
+### Arquivos alterados
+
+**Nenhum.** Módulo totalmente novo e isolado.
+
+### Observações
+
+- Nenhum SDK de vendor instalado (0 dependências novas no package.json)
+- Nenhum .env, API key, endpoint real
+- Nenhuma UI nova (botões, modais, painéis)
+- Editor existente não foi modificado
+- Zod usado para validação de fronteira em BoundingBox, ImageInput, GeneratedImage
+- AIMask usa discriminated union para suportar múltiplos formatos futuros sem acoplamento
+- AIProviders é um value object simples — não um service locator global
+
+---
+
+## ETAPA 32 — OCR Provider
+
+### Status: CONCLUIDA
+
+**Data:** 2026-08-11
+
+### Objetivo
+Implementar a primeira integração real de IA: OCR via Google Cloud Vision API, seguindo os contratos definidos na ETAPA 31 (OCRProvider, DetectedText, OCRResult).
+
+### Implementado
+
+#### Provider Escolhido: Google Cloud Vision
+- REST API (sem SDK — compatível com Vercel serverless)
+- Detecta texto com coordenadas bounding box e polygon
+- Multi-idioma: pt, en, es (configurável via `languageHints`)
+- Formatos: PNG, JPEG, WEBP
+
+#### Arquitetura
+
+```
+Browser / Client
+       ↓ POST JSON { image: { base64, url, blob } }
+POST /api/ai/ocr
+       ↓
+GoogleOCRProvider.detectText()
+       ↓
+Google Cloud Vision REST API
+       ↓ POST { requests: [{ image: { content }, features: [TEXT_DETECTION] }] }
+Google Response
+       ↓
+normalizeGoogleOCRResponse()
+       ↓
+OCRResult { detectedTexts: DetectedText[] }
+       ↓
+NextResponse.json(result)
+```
+
+#### Arquivos de implementação
+
+| Arquivo | Descrição |
+|---------|-----------|
+| `src/ai/providers/google-ocr-provider.ts` | GoogleOCRProvider implements OCRProvider (REST API) |
+| `src/ai/providers/fake-ocr-provider.ts` | FakeOCRProvider — fixture de desenvolvimento (3 textos simulados) |
+| `src/ai/normalizers/ocr-normalizer.ts` | normalizeGoogleOCRResponse — converte resposta Google → DetectedText[] |
+| `src/app/api/ai/ocr/route.ts` | POST /api/ai/ocr — endpoint server-side com validação e error mapping |
+
+#### GoogleOCRProvider
+
+- **id:** `google-cloud-vision`
+- **constructor:** recebe `{ apiKey, timeoutMs? }`
+- **detectText(input, options?):** converte ImageInput (url/blob/base64) → base64 → Google Vision REST API
+- **ResolveImageContent:** URL com validação de protocolo (http/https only), timeout 10s; Blob via arrayBuffer; base64 direto
+- **Timeout:** 30s default, configurável
+- **AbortSignal:** suportado via AbortController interno + propaga signal externo
+- **Error mapping:** HTTP 401/403 → AUTHENTICATION, 429 → RATE_LIMIT, ≥500 → PROVIDER_ERROR (retryable), timeout → TIMEOUT, cancel → CANCELLED
+
+#### Normalização (ocr-normalizer.ts)
+- Ignora anotação completa (índice 0 do Google, que retorna texto total)
+- Usa anotações individuais (índice 1..n) para granularidade útil
+- Calcula boundingBox de vertices (min/max x, y, width, height)
+- Extrai polygon quando ≥ 3 vértices
+- Extrai locale do Google como `language`
+- Confidence: 0 (Google text detection não fornece confidence por palavra)
+- Validação: filtra NaN/Infinity das coordenadas
+
+#### API Route (POST /api/ai/ocr)
+- Request: JSON body com `image: { base64?, url?, blob? }`
+- Validação: content-length ≤ 10MB, JSON parse, image source presente
+- Config check: GET /api/ai/ocr retorna `{ configured, provider }`
+- Error mapping: AIErrorCode → HTTP status (400-504)
+- Secrets: OCR_API_KEY server-side only (nunca exposto ao browser)
+- Sem OCR_API_KEY configurada: retorna 503 com mensagem clara
+
+#### FakeOCRProvider
+- Fixture: 3 textos simulados (OFERTA ESPECIAL, 50% OFF, COMPRE AGORA)
+- Bounding boxes, confidence, language, approximateFontSize predefinidos
+- Suporta AbortSignal para teste de cancelamento
+
+### Segurança
+
+- API key: `OCR_API_KEY` (server-side only, NUNCA NEXT_PUBLIC)
+- URL input: valida protocolo http/https, bloqueia file:// e outros
+- Timeout de download de URL: 10s
+- Max body size: 10 MB
+- Errors nunca expõem API key, Authorization header ou raw response
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### LIVE OCR TEST
+
+**NOT EXECUTED — API KEY NOT CONFIGURED**
+
+Para testar:
+1. Criar API key no Google Cloud Console (Cloud Vision API habilitada)
+2. Configurar `OCR_API_KEY=...` no ambiente Vercel
+3. POST /api/ai/ocr com `{ "image": { "base64": "..." } }`
+
+### Limitações Conhecidas
+
+- Google text detection não retorna confidence individual para palavras; `confidence` é 0
+- Bounding box usa min/max de vértices (aproximação retangular); texto rotacionado tem bounding box maior
+- Language hints são configurados como preferência (pt, en, es); Google pode detectar outros idiomas
+
+### ETAPA 33 continua NÃO INICIADA
+
+---
+
+## CHECKPOINT 32.1 — OCR Hardening + Live Validation
+
+### Status: CONCLUIDO
+
+**Data:** 2026-08-11
+
+### Objetivo
+Fortalecer a implementação OCR antes da ETAPA 33. Corrigir semântica de confidence, proteger contra SSRF, definir transporte oficial de imagens, e validar contratos.
+
+### Live OCR Test
+**BLOCKED — OCR_API_KEY NOT CONFIGURED**
+
+### Correções Aplicadas
+
+#### 1. Confidence — Optional
+- `DetectedText.confidence` alterado de obrigatório para opcional (`confidence?: Confidence`)
+- `undefined` = não fornecido pelo provider; `0` = confiança zero
+- Normalizer do Google Cloud Vision não define `confidence` (Google TEXT_DETECTION não fornece por palavra)
+- FakeOCRProvider mantém valores simulados (0.96-0.98)
+
+#### 2. SSRF Protection
+- API route pública (`POST /api/ai/ocr`) NÃO aceita mais URLs arbitrárias
+- Somente dois formatos: `multipart/form-data` (campo `file`) e JSON com `{ image: { base64: "..." } }`
+- Rota pública não tem superfície SSRF (zero fetch de URL do usuário)
+- Provider interno (`GoogleOCRProvider.resolveImageContent`) mantém suporte a URL com:
+  - Bloqueio de: localhost, 127.0.0.0/8, ::1, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16, 0.0.0.0, metadata.google.internal
+  - Bloqueio de IPv6 loopback e link-local (fe80::)
+  - Validação de redirects: max 3, cada destino validado com isBlockedHost
+  - Timeout de download: 10s
+  - Tamanho máximo: 10 MB
+
+#### 3. Image Transport (oficial para ETAPA 33)
+- **Browser → Route:** `multipart/form-data` com campo `file` (preferido, eficiente para uploads diretos) OU JSON com `{ image: { base64: "..." } }`
+- **Route → Google:** base64 puro (requerido pelo REST API do Google Cloud Vision)
+- Sem conversões redundantes: Blob/File → `arrayBuffer()` → `Buffer.from().toString('base64')` uma única vez
+- Validação de MIME type no multipart (image/png, image/jpeg, image/webp)
+- Limite: 10 MB (route + provider)
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Limitações Conhecidas
+
+- `confidence` é undefined para Google Cloud Vision (não fornecido por palavra no modo TEXT_DETECTION)
+- Live test não executado (sem API key)
+- Granularidade do Google será avaliada quando API key estiver disponível
+
+### Arquivos alterados
+
+| Arquivo | Mudança |
+|---------|---------|
+| `src/ai/types/ocr.ts` | `confidence` → opcional |
+| `src/ai/normalizers/ocr-normalizer.ts` | Não define `confidence` (era `0`) |
+| `src/ai/providers/google-ocr-provider.ts` | SSRF: isBlockedHost, validateImageUrl, limite redirect, size cap |
+| `src/app/api/ai/ocr/route.ts` | Drop URL, multipart/form-data + base64 JSON, validação MIME |
+| `DEVELOPMENT_STATE.md` | Checkpoint 32.1 + limpeza stale lines |
+
+### ETAPA 33 continua NÃO INICIADA
 
 ---
 
