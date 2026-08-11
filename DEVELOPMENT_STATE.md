@@ -464,6 +464,37 @@ Fortalecer a implementação OCR antes da ETAPA 33. Corrigir semântica de confi
 
 ---
 
+## CHECKPOINT 32.2 — Preview Deploy + Live OCR Validation
+
+### Status: PARCIALMENTE CONCLUIDO
+
+**Data:** 2026-08-11
+
+### Deploy
+- **Preview URL:** https://editor-fotos-lgom8d3tt-viniciusflas-projects.vercel.app
+- **Commit:** 8e10ec7 — feat: ETAPA 32 + CHECKPOINT 32.1
+- **Build:** OK (Compiled 2.4s, TypeScript 5.1s, Static 5 pages 214ms, Ready 30s)
+- **Routes:** `/` (static), `/api/ai/ocr` (dynamic) — ambas registradas
+
+### OCR Config Check
+**NOT EXECUTED** — Vercel preview deployments são protegidos por autenticação. A rota `/api/ai/ocr` retorna login gate do Vercel. Config check e live OCR requerem deployment público (production).
+
+### Live OCR Test
+**NOT EXECUTED** — API key status desconhecido (rota bloqueada por auth gate).
+
+### Para testar OCR live
+1. Configurar `OCR_API_KEY` no dashboard Vercel (Settings → Environment Variables)
+2. Deploy em production (`vercel --prod`) — editor-fotos-jet.vercel.app
+3. GET `/api/ai/ocr` deve retornar `{ configured: true, provider: "google-cloud-vision" }`
+4. POST multipart/form-data com campo `file` para testar OCR
+
+### Build logs
+Sem erros ou warnings de aplicação. Apenas `npm warn deprecated` de dependências upstream.
+
+### ETAPA 33 continua NÃO INICIADA
+
+---
+
 ## ETAPA 01 — Project Setup
 
 ### Status: CONCLUIDA
