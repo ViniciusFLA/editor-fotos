@@ -104,7 +104,8 @@ export function LayersPanel() {
       const [removed] = newOrder.splice(fromIndex, 1);
       newOrder.splice(toIndex, 0, removed!);
 
-      pushHistoryImmediate(useEditorStore.getState().elements);
+      const hStore = useEditorStore.getState();
+      pushHistoryImmediate(hStore.activePageId, hStore.elements, hStore.pageBackground);
 
       reorderElementsByZIndex(newOrder.map((el) => el.id));
     },
@@ -138,7 +139,8 @@ export function LayersPanel() {
         <button
           onClick={() => {
             if (!selectedId) return;
-            pushHistoryImmediate(useEditorStore.getState().elements);
+            const hStore = useEditorStore.getState();
+      pushHistoryImmediate(hStore.activePageId, hStore.elements, hStore.pageBackground);
             bringToFront(selectedId);
           }}
           disabled={!selectedId}
@@ -150,7 +152,8 @@ export function LayersPanel() {
         <button
           onClick={() => {
             if (!selectedId) return;
-            pushHistoryImmediate(useEditorStore.getState().elements);
+            const hStore = useEditorStore.getState();
+      pushHistoryImmediate(hStore.activePageId, hStore.elements, hStore.pageBackground);
             bringForward(selectedId);
           }}
           disabled={!selectedId}
@@ -162,7 +165,8 @@ export function LayersPanel() {
         <button
           onClick={() => {
             if (!selectedId) return;
-            pushHistoryImmediate(useEditorStore.getState().elements);
+            const hStore = useEditorStore.getState();
+      pushHistoryImmediate(hStore.activePageId, hStore.elements, hStore.pageBackground);
             sendBackward(selectedId);
           }}
           disabled={!selectedId}
@@ -174,7 +178,8 @@ export function LayersPanel() {
         <button
           onClick={() => {
             if (!selectedId) return;
-            pushHistoryImmediate(useEditorStore.getState().elements);
+            const hStore = useEditorStore.getState();
+      pushHistoryImmediate(hStore.activePageId, hStore.elements, hStore.pageBackground);
             sendToBack(selectedId);
           }}
           disabled={!selectedId}

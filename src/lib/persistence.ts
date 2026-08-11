@@ -2,6 +2,24 @@ const DB_NAME = 'creative-editor';
 const DB_VERSION = 1;
 const STORE_NAME = 'projects';
 
+const LAST_PROJECT_ID_KEY = 'creative-editor:lastProjectId';
+
+export function getLastProjectId(): string | null {
+  try {
+    return localStorage.getItem(LAST_PROJECT_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setLastProjectId(id: string): void {
+  try {
+    localStorage.setItem(LAST_PROJECT_ID_KEY, id);
+  } catch {
+    // localStorage may be unavailable
+  }
+}
+
 interface ProjectRecord {
   id: string;
   name: string;
@@ -22,6 +40,7 @@ function openDB(): Promise<IDBDatabase> {
 
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error('Database upgrade blocked. Close other tabs and try again.'));
   });
 }
 
@@ -42,13 +61,21 @@ export async function saveProjectData(
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     store.put(record);
+
     tx.oncomplete = () => {
       db.close();
+      setLastProjectId(id);
       resolve();
     };
+
     tx.onerror = () => {
       db.close();
-      reject(tx.error);
+      reject(tx.error ?? new Error('Transaction failed'));
+    };
+
+    tx.onabort = () => {
+      db.close();
+      reject(new Error('Transaction aborted. Storage may be full or quota exceeded.'));
     };
   });
 }
@@ -79,13 +106,20 @@ export async function deleteProjectData(id: string): Promise<void> {
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
     store.delete(id);
+
     tx.oncomplete = () => {
       db.close();
       resolve();
     };
+
     tx.onerror = () => {
       db.close();
-      reject(tx.error);
+      reject(tx.error ?? new Error('Transaction failed'));
+    };
+
+    tx.onabort = () => {
+      db.close();
+      reject(new Error('Transaction aborted. Storage may be full or quota exceeded.'));
     };
   });
 }
@@ -102,18 +136,22 @@ export async function listProjects(): Promise<ProjectListItem[]> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
-    const request = store.getAll();
+    const request = store.openCursor();
+    const results: ProjectListItem[] = [];
 
     request.onsuccess = () => {
-      db.close();
-      const records = request.result as ProjectRecord[];
-      resolve(
-        records.map((r) => ({
-          id: r.id,
-          name: r.name,
-          updatedAt: r.updatedAt,
-        })),
-      );
+      const cursor = request.result;
+      if (cursor) {
+        results.push({
+          id: cursor.value.id,
+          name: cursor.value.name,
+          updatedAt: cursor.value.updatedAt,
+        });
+        cursor.continue();
+      } else {
+        db.close();
+        resolve(results);
+      }
     };
     request.onerror = () => {
       db.close();

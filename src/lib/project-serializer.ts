@@ -1,4 +1,4 @@
-import type { AnyElement, ImageElement, PageData } from '@/types';
+import type { AnyElement, ImageElement, GroupElement, PageData, PageBackground } from '@/types';
 
 export interface SerializedProject {
   id: string;
@@ -10,9 +10,17 @@ export interface SerializedProject {
   updatedAt: string;
 }
 
+const BLOB_FETCH_TIMEOUT_MS = 10000;
+
 async function blobUrlToDataUrl(blobUrl: string): Promise<string> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), BLOB_FETCH_TIMEOUT_MS);
+
   try {
-    const response = await fetch(blobUrl);
+    const response = await fetch(blobUrl, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`Failed to fetch blob: ${response.status}`);
+    }
     const blob = await response.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -20,19 +28,38 @@ async function blobUrlToDataUrl(blobUrl: string): Promise<string> {
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
-  } catch {
-    return blobUrl;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
-async function serializeImageElement(el: ImageElement): Promise<ImageElement> {
-  let src = el.src;
-
-  if (src.startsWith('blob:')) {
-    src = await blobUrlToDataUrl(src);
+async function serializeElement(el: AnyElement): Promise<AnyElement> {
+  if (el.type === 'image') {
+    const img = el as ImageElement;
+    let src = img.src;
+    if (src.startsWith('blob:')) {
+      src = await blobUrlToDataUrl(src);
+    }
+    return { ...img, src };
   }
 
-  return { ...el, src };
+  if (el.type === 'group') {
+    const group = el as GroupElement;
+    const serializedChildren = await Promise.all(
+      group.childElements.map((child) => serializeElement(child)),
+    );
+    return { ...group, childElements: serializedChildren };
+  }
+
+  return el;
+}
+
+async function serializeBackground(bg: PageBackground): Promise<PageBackground> {
+  if (bg.type !== 'image' || !bg.src) return bg;
+  if (!bg.src.startsWith('blob:')) return bg;
+
+  const src = await blobUrlToDataUrl(bg.src);
+  return { ...bg, src };
 }
 
 export async function serializeProject(
@@ -41,32 +68,20 @@ export async function serializeProject(
   pages: PageData[],
   activePageId: string,
   activeElements: AnyElement[],
-  activeBackground: import('@/types').PageBackground,
+  activeBackground: PageBackground,
   createdAt: string,
 ): Promise<SerializedProject> {
   const serializedPages: PageData[] = await Promise.all(
     pages.map(async (p) => {
-      if (p.id === activePageId) {
-        const elements = await Promise.all(
-          activeElements.map(async (el) => {
-            if (el.type === 'image') {
-              return serializeImageElement(el as ImageElement);
-            }
-            return el;
-          }),
-        );
-        return { ...p, elements, background: activeBackground };
-      }
-
+      const isActive = p.id === activePageId;
       const elements = await Promise.all(
-        p.elements.map(async (el) => {
-          if (el.type === 'image') {
-            return serializeImageElement(el as ImageElement);
-          }
-          return el;
-        }),
+        (isActive ? activeElements : p.elements).map((el) => serializeElement(el)),
       );
-      return { ...p, elements };
+      const background = isActive
+        ? await serializeBackground(activeBackground)
+        : await serializeBackground(p.background);
+
+      return { ...p, elements, background };
     }),
   );
 

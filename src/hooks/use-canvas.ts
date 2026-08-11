@@ -25,6 +25,8 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
   const containerRef = useRef<HTMLDivElement>(null);
   const syncingFromCanvasRef = useRef(false);
   const isTextEditingRef = useRef(false);
+  const disposedRef = useRef(false);
+  const bgGenerationRef = useRef(0);
   const [baseScale, setBaseScale] = useState(1);
   const [canvasReady, setCanvasReady] = useState(false);
 
@@ -37,7 +39,7 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     const el = canvasElRef.current;
     if (!el) return;
 
-    let disposed = false;
+    disposedRef.current = false;
 
     const canvas = new Canvas(el, {
       width: logicalWidth,
@@ -48,26 +50,26 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
       selectionBorderColor: '#3b82f6',
       selectionLineWidth: 1,
       selectionDashArray: [4, 4],
-      renderOnAddRemove: true,
+      renderOnAddRemove: false,
       preserveObjectStacking: true,
     });
 
-    if (disposed) {
+    if (disposedRef.current) {
       canvas.dispose();
       return;
     }
 
     canvasInstanceRef.current = canvas;
+    setCanvasReady(true);
 
     requestAnimationFrame(() => {
-      if (!disposed) {
+      if (!disposedRef.current) {
         canvas.renderAll();
-        setCanvasReady(true);
       }
     });
 
     return () => {
-      disposed = true;
+      disposedRef.current = true;
       setCanvasReady(false);
       const instance = canvasInstanceRef.current;
       canvasInstanceRef.current = null;
@@ -93,8 +95,10 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvas.on('text:editing:exited', handleEditingExited);
 
     return () => {
-      canvas.off('text:editing:entered', handleEditingEntered);
-      canvas.off('text:editing:exited', handleEditingExited);
+      const currentCanvas = canvasInstanceRef.current;
+      if (!currentCanvas) return;
+      currentCanvas.off('text:editing:entered', handleEditingEntered);
+      currentCanvas.off('text:editing:exited', handleEditingExited);
     };
   }, [canvasReady]);
 
@@ -126,9 +130,11 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvas.on('selection:cleared', handleSelectionChanged);
 
     return () => {
-      canvas.off('selection:created', handleSelectionChanged);
-      canvas.off('selection:updated', handleSelectionChanged);
-      canvas.off('selection:cleared', handleSelectionChanged);
+      const currentCanvas = canvasInstanceRef.current;
+      if (!currentCanvas) return;
+      currentCanvas.off('selection:created', handleSelectionChanged);
+      currentCanvas.off('selection:updated', handleSelectionChanged);
+      currentCanvas.off('selection:cleared', handleSelectionChanged);
     };
   }, [canvasReady]);
 
@@ -176,18 +182,21 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
       const id = getElementId(active);
       if (!id) return;
 
+      const store = useEditorStore.getState();
+
+      if (store.cropModeElementId) return;
+
       syncingFromCanvasRef.current = true;
 
       normalizeFabricObject(active);
 
-      const store = useEditorStore.getState();
       const element = store.elements.find((el) => el.id === id);
       if (!element) {
         syncingFromCanvasRef.current = false;
         return;
       }
 
-      pushHistoryImmediate(store.elements);
+      pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
       const updates = extractElementUpdates(active, element.type);
       store.updateElement(id, updates);
@@ -202,7 +211,9 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvas.on('object:modified', handleObjectModified);
 
     return () => {
-      canvas.off('object:modified', handleObjectModified);
+      const currentCanvas = canvasInstanceRef.current;
+      if (!currentCanvas) return;
+      currentCanvas.off('object:modified', handleObjectModified);
     };
   }, [canvasReady]);
 
@@ -235,6 +246,11 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     };
 
     const handleObjectMoving = () => {
+      if (isTextEditingRef.current) return;
+
+      const store = useEditorStore.getState();
+      if (store.cropModeElementId) return;
+
       clearGuides();
 
       const active = canvas.getActiveObject();
@@ -355,8 +371,10 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvas.on('mouse:up', handleMouseUp);
 
     return () => {
-      canvas.off('object:moving', handleObjectMoving);
-      canvas.off('mouse:up', handleMouseUp);
+      const currentCanvas = canvasInstanceRef.current;
+      if (!currentCanvas) return;
+      currentCanvas.off('object:moving', handleObjectMoving);
+      currentCanvas.off('mouse:up', handleMouseUp);
       clearGuides();
     };
   }, [canvasReady, logicalWidth, logicalHeight]);
@@ -399,24 +417,24 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
       const dLeft = (img.left ?? 0) - anchorPos.left;
       const dTop = (img.top ?? 0) - anchorPos.top;
 
-      const newCropX = anchorPos.cropX - dLeft / sx;
-      const newCropY = anchorPos.cropY - dTop / sy;
-
-      img.cropX = newCropX;
-      img.cropY = newCropY;
+      img.cropX = anchorPos.cropX - dLeft / sx;
+      img.cropY = anchorPos.cropY - dTop / sy;
 
       img.set({
         left: anchorPos.left,
         top: anchorPos.top,
       });
-
-      store.updateElement(store.cropModeElementId, {
-        cropX: newCropX,
-        cropY: newCropY,
-      } as Partial<AnyElement>);
     };
 
     const handleCropUp = () => {
+      if (cropObj) {
+        const store = useEditorStore.getState();
+        const img = cropObj as FabricImage;
+        store.updateElement(store.cropModeElementId!, {
+          cropX: img.cropX,
+          cropY: img.cropY,
+        } as Partial<AnyElement>);
+      }
       cropObj = null;
     };
 
@@ -425,11 +443,13 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     canvas.on('mouse:up', handleCropUp);
 
     return () => {
-      canvas.off('mouse:down', handleCropDown);
-      canvas.off('object:moving', handleCropMoving);
-      canvas.off('mouse:up', handleCropUp);
+      const currentCanvas = canvasInstanceRef.current;
+      if (!currentCanvas) return;
+      currentCanvas.off('mouse:down', handleCropDown);
+      currentCanvas.off('object:moving', handleCropMoving);
+      currentCanvas.off('mouse:up', handleCropUp);
     };
-  }, [canvasReady, canvasInstanceRef]);
+  }, [canvasReady]);
 
   const recalculateScale = useCallback(() => {
     const container = containerRef.current;
@@ -472,22 +492,27 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     if (!canvas || !canvasReady) return;
 
     const bg = pageBackground;
+    const generation = ++bgGenerationRef.current;
+
+    const prevBgImage = canvas.backgroundImage;
+    if (prevBgImage instanceof FabricImage) {
+      canvas.backgroundImage = undefined;
+    }
 
     if (bg.type === 'none') {
       canvas.backgroundColor = '';
-      canvas.backgroundImage = undefined;
     } else if (bg.type === 'color') {
       canvas.backgroundColor = bg.color;
-      canvas.backgroundImage = undefined;
     } else if (bg.type === 'image') {
       canvas.backgroundColor = bg.color || '#ffffff';
       if (bg.src) {
         FabricImage.fromURL(bg.src).then((img) => {
-          canvas.backgroundImage = img;
-          canvas.requestRenderAll();
+          if (bgGenerationRef.current !== generation) return;
+          const currentCanvas = canvasInstanceRef.current;
+          if (!currentCanvas || currentCanvas !== canvas) return;
+          currentCanvas.backgroundImage = img;
+          currentCanvas.requestRenderAll();
         });
-      } else {
-        canvas.backgroundImage = undefined;
       }
     } else if (bg.type === 'linear-gradient') {
       const angleRad = (bg.direction % 360) * (Math.PI / 180);
@@ -501,18 +526,16 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
         },
         colorStops: bg.gradientStops.map((s) => ({ offset: s.offset, color: s.color })),
       });
-      canvas.backgroundImage = undefined;
     } else if (bg.type === 'radial-gradient') {
       canvas.backgroundColor = new Gradient({
         type: 'radial',
         coords: { x1: 0.5, y1: 0.5, r1: 0, x2: 0.5, y2: 0.5, r2: 0.5 },
         colorStops: bg.gradientStops.map((s) => ({ offset: s.offset, color: s.color })),
       });
-      canvas.backgroundImage = undefined;
     }
 
     canvas.requestRenderAll();
-  }, [pageBackground, canvasReady, canvasInstanceRef]);
+  }, [pageBackground, canvasReady]);
 
   return {
     canvasElRef,

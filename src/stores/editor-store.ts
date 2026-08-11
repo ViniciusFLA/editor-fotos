@@ -1,9 +1,10 @@
 import { create } from 'zustand';
 import type { AnyElement, GroupElement, ImageElement, PageBackground, PageData } from '@/types';
 import type { ShapeType } from '@/types';
-import { generateId } from '@/utils';
-import { saveProjectData, loadProjectData } from '@/lib/persistence';
+import { generateId, deepCloneElement, deepCloneElementWithNewIds } from '@/utils';
+import { saveProjectData, loadProjectData, getLastProjectId } from '@/lib/persistence';
 import { serializeProject } from '@/lib/project-serializer';
+import { clearHistory } from '@/editor/history/history-manager';
 
 const ZOOM_MIN = 0.1;
 const ZOOM_MAX = 4.0;
@@ -50,6 +51,7 @@ interface EditorStore {
   activePageId: string;
   projectId: string;
   projectName: string;
+  createdAt: string;
   saveStatus: 'saved' | 'unsaved' | 'saving' | 'error';
   triggeredExport: number;
   exportFormat: 'png' | 'jpeg' | 'webp';
@@ -124,6 +126,38 @@ function reorderZIndices(elements: AnyElement[], orderedIds: string[]): AnyEleme
   });
 }
 
+function revokeBlobUrls(elements: AnyElement[]): void {
+  for (const el of elements) {
+    if (el.type === 'image') {
+      const src = (el as ImageElement).src;
+      if (src.startsWith('blob:')) {
+        URL.revokeObjectURL(src);
+      }
+    } else if (el.type === 'group') {
+      revokeBlobUrls((el as GroupElement).childElements);
+    }
+  }
+}
+
+interface PageSyncState {
+  pages: PageData[];
+  activePageId: string;
+}
+
+function withPageSync(
+  state: PageSyncState,
+  newElements: AnyElement[],
+  extra?: Partial<EditorStore>,
+): Partial<EditorStore> {
+  return {
+    elements: newElements,
+    pages: state.pages.map((p) =>
+      p.id === state.activePageId ? { ...p, elements: newElements } : p,
+    ),
+    ...(extra ?? {}),
+  };
+}
+
 export const useEditorStore = create<EditorStore>((set) => ({
   elements: [],
   selectedElementIds: [],
@@ -176,8 +210,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
     },
   ],
   activePageId: 'page-1',
-  projectId: generateId(),
+  projectId: getLastProjectId() || generateId(),
   projectName: 'Untitled Project',
+  createdAt: new Date().toISOString(),
   saveStatus: 'saved',
   triggeredExport: 0,
   exportFormat: 'png' as const,
@@ -192,20 +227,28 @@ export const useEditorStore = create<EditorStore>((set) => ({
     })),
 
   addElement: (element) =>
-    set((state) => ({ elements: [...state.elements, element] })),
+    set((state) => withPageSync(state, [...state.elements, element])),
 
   removeElement: (id) =>
-    set((state) => ({
-      elements: state.elements.filter((el) => el.id !== id),
-      selectedElementIds: state.selectedElementIds.filter((sid) => sid !== id),
-    })),
+    set((state) => {
+      const removed = state.elements.find((el) => el.id === id);
+      if (removed) {
+        revokeBlobUrls([removed]);
+      }
+      return withPageSync(state, state.elements.filter((el) => el.id !== id), {
+        selectedElementIds: state.selectedElementIds.filter((sid) => sid !== id),
+      });
+    }),
 
   updateElement: (id, updates) =>
-    set((state) => ({
-      elements: state.elements.map((el) =>
-        el.id === id ? ({ ...el, ...updates } as AnyElement) : el,
+    set((state) =>
+      withPageSync(
+        state,
+        state.elements.map((el) =>
+          el.id === id ? ({ ...el, ...updates } as AnyElement) : el,
+        ),
       ),
-    })),
+    ),
 
   setSelectedElementIds: (ids) => set({ selectedElementIds: ids }),
 
@@ -227,13 +270,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const current = sorted[idx]!;
       const next = sorted[idx + 1]!;
 
-      return {
-        elements: state.elements.map((el) => {
-          if (el.id === current.id) return { ...el, zIndex: next.zIndex } as AnyElement;
-          if (el.id === next.id) return { ...el, zIndex: current.zIndex } as AnyElement;
-          return el;
-        }),
-      };
+      const newElements = state.elements.map((el) => {
+        if (el.id === current.id) return { ...el, zIndex: next.zIndex } as AnyElement;
+        if (el.id === next.id) return { ...el, zIndex: current.zIndex } as AnyElement;
+        return el;
+      });
+
+      return withPageSync(state, newElements);
     }),
 
   sendBackward: (id) =>
@@ -245,47 +288,45 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const current = sorted[idx]!;
       const prev = sorted[idx - 1]!;
 
-      return {
-        elements: state.elements.map((el) => {
-          if (el.id === current.id) return { ...el, zIndex: prev.zIndex } as AnyElement;
-          if (el.id === prev.id) return { ...el, zIndex: current.zIndex } as AnyElement;
-          return el;
-        }),
-      };
+      const newElements = state.elements.map((el) => {
+        if (el.id === current.id) return { ...el, zIndex: prev.zIndex } as AnyElement;
+        if (el.id === prev.id) return { ...el, zIndex: current.zIndex } as AnyElement;
+        return el;
+      });
+
+      return withPageSync(state, newElements);
     }),
 
   bringToFront: (id) =>
     set((state) => {
       const maxZ = Math.max(0, ...state.elements.map((el) => el.zIndex));
 
-      return {
-        elements: state.elements.map((el) =>
-          el.id === id ? ({ ...el, zIndex: maxZ + 1 } as AnyElement) : el,
-        ),
-      };
+      const newElements = state.elements.map((el) =>
+        el.id === id ? ({ ...el, zIndex: maxZ + 1 } as AnyElement) : el,
+      );
+
+      return withPageSync(state, newElements);
     }),
 
   sendToBack: (id) =>
     set((state) => {
       const minZ = Math.min(0, ...state.elements.map((el) => el.zIndex));
 
-      return {
-        elements: state.elements.map((el) =>
-          el.id === id ? ({ ...el, zIndex: minZ - 1 } as AnyElement) : el,
-        ),
-      };
+      const newElements = state.elements.map((el) =>
+        el.id === id ? ({ ...el, zIndex: minZ - 1 } as AnyElement) : el,
+      );
+
+      return withPageSync(state, newElements);
     }),
 
   reorderElementsByZIndex: (orderedIds) =>
-    set((state) => ({
-      elements: reorderZIndices(state.elements, orderedIds),
-    })),
+    set((state) => withPageSync(state, reorderZIndices(state.elements, orderedIds))),
 
   copyToClipboard: () =>
     set((state) => {
-      const selected = state.elements.filter((el) =>
-        state.selectedElementIds.includes(el.id),
-      );
+      const selected = state.elements
+        .filter((el) => state.selectedElementIds.includes(el.id))
+        .map((el) => deepCloneElement(el));
       return { clipboard: selected, pasteOffset: 1 };
     }),
 
@@ -318,20 +359,22 @@ export const useEditorStore = create<EditorStore>((set) => ({
     })),
 
   groupSelected: (group, childIds) =>
-    set((state) => ({
-      elements: state.elements
-        .filter((el) => !childIds.includes(el.id))
-        .concat(group as AnyElement),
-      selectedElementIds: [group.id],
-    })),
+    set((state) =>
+      withPageSync(
+        state,
+        state.elements.filter((el) => !childIds.includes(el.id)).concat(group as AnyElement),
+        { selectedElementIds: [group.id] },
+      ),
+    ),
 
   ungroupSelected: (groupId, children) =>
-    set((state) => ({
-      elements: state.elements
-        .filter((el) => el.id !== groupId)
-        .concat(children),
-      selectedElementIds: children.map((c) => c.id),
-    })),
+    set((state) =>
+      withPageSync(
+        state,
+        state.elements.filter((el) => el.id !== groupId).concat(children),
+        { selectedElementIds: children.map((c) => c.id) },
+      ),
+    ),
 
   triggerGroup: () =>
     set((state) => ({ triggeredGroup: state.triggeredGroup + 1 })),
@@ -389,10 +432,16 @@ export const useEditorStore = create<EditorStore>((set) => ({
         return p;
       });
 
-      const pageNum = state.pages.length + 1;
+      const usedNumbers = state.pages
+        .map((p) => {
+          const match = p.name.match(/^Page (\d+)$/);
+          return match ? parseInt(match[1], 10) : 0;
+        })
+        .filter((n) => n > 0);
+      const nextNum = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
       const newPage: PageData = {
         id: generateId(),
-        name: `Page ${pageNum}`,
+        name: `Page ${nextNum}`,
         width: width ?? 1080,
         height: height ?? 1080,
         background: {
@@ -456,7 +505,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         ...source,
         id: generateId(),
         name: `${source.name} copy`,
-        elements: source.elements.map((el) => ({ ...el, id: generateId() })),
+        elements: source.elements.map((el) => deepCloneElementWithNewIds(el)),
       };
 
       const insertAt = updatedSourcePages.findIndex((p) => p.id === id) + 1;
@@ -484,6 +533,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   saveProject: async () => {
     const state = useEditorStore.getState();
+
+    if (state.saveStatus === 'saving') return;
+
     set({ saveStatus: 'saving' });
 
     try {
@@ -494,11 +546,16 @@ export const useEditorStore = create<EditorStore>((set) => ({
         state.activePageId,
         state.elements,
         state.pageBackground,
-        state.projectId === generateId() ? new Date().toISOString() : '', // use existing createdAt if known
+        state.createdAt || new Date().toISOString(),
       );
 
       await saveProjectData(state.projectId, state.projectName, JSON.stringify(data));
-      set({ saveStatus: 'saved' });
+
+      if (!state.createdAt) {
+        set({ saveStatus: 'saved', createdAt: data.createdAt });
+      } else {
+        set({ saveStatus: 'saved' });
+      }
     } catch {
       set({ saveStatus: 'error' });
     }
@@ -508,38 +565,47 @@ export const useEditorStore = create<EditorStore>((set) => ({
     const record = await loadProjectData(id);
     if (!record) return;
 
-    const data = JSON.parse(record.data);
+    let data: {
+      pages?: PageData[];
+      activePageId?: string;
+      createdAt?: string;
+    };
+    try {
+      data = JSON.parse(record.data);
+    } catch {
+      return;
+    }
+
+    clearHistory();
 
     set((state) => {
-      const updatedPages = state.pages.map((p) => {
-        if (p.id === state.activePageId) {
-          return { ...p, elements: state.elements, background: state.pageBackground };
-        }
-        return p;
-      });
+      revokeBlobUrls(state.elements);
 
-      const loadedPages = data.pages || data.pages || [];
+      const loadedPages = data.pages || [];
       const loadedActiveId = data.activePageId || loadedPages[0]?.id || 'page-1';
       const firstPage = loadedPages.find((p: PageData) => p.id === loadedActiveId) || loadedPages[0];
 
       return {
         projectId: id,
         projectName: record.name,
+        createdAt: data.createdAt || record.updatedAt,
         pages: loadedPages,
         activePageId: loadedActiveId,
         elements: firstPage?.elements ?? [],
         pageBackground: firstPage?.background ?? state.pageBackground,
         selectedElementIds: [],
         saveStatus: 'saved' as const,
-        rebuildCanvasVersion: (updatedPages[0]?.elements?.length ?? 0) > 0
-          ? state.rebuildCanvasVersion + 1
-          : state.rebuildCanvasVersion + 1,
+        rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
       };
     });
   },
 
-  newProject: () =>
-    set((state) => {
+  newProject: () => {
+      clearHistory();
+
+      set((state) => {
+      revokeBlobUrls(state.elements);
+
       const newId = generateId();
       const defaultPage: PageData = {
         id: generateId(),
@@ -563,6 +629,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       return {
         projectId: newId,
         projectName: 'Untitled Project',
+        createdAt: new Date().toISOString(),
         pages: [defaultPage],
         activePageId: defaultPage.id,
         elements: [],
@@ -571,7 +638,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
         saveStatus: 'saved' as const,
         rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
       };
-    }),
+    });
+  },
 
   markUnsaved: () => set({ saveStatus: 'unsaved' }),
 

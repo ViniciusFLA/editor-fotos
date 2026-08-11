@@ -66,7 +66,10 @@ export function TopToolbar() {
             onBlur={commitName}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitName();
-              if (e.key === 'Escape') setEditingName(false);
+              if (e.key === 'Escape') {
+                setNameValue(projectName);
+                setEditingName(false);
+              }
             }}
             className='h-7 rounded border border-ring bg-background px-2 text-sm font-semibold focus:outline-none'
           />

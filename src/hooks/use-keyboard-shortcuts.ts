@@ -15,8 +15,8 @@ import {
   undo,
   redo,
 } from '@/editor/history/history-manager';
-import { generateId } from '@/utils';
-import type { ImageElement, AnyElement, GroupElement } from '@/types';
+import { generateId, deepCloneElementWithNewIds } from '@/utils';
+import type { AnyElement, GroupElement } from '@/types';
 
 interface UseKeyboardShortcutsParams {
   canvasInstanceRef: React.MutableRefObject<Canvas | null>;
@@ -39,7 +39,7 @@ export function useKeyboardShortcuts({
     const ids = store.selectedElementIds;
     if (ids.length === 0) return;
 
-    pushHistoryImmediate(store.elements);
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     ids.forEach((id) => {
       const obj = findFabricObjectById(canvas, id);
@@ -64,7 +64,7 @@ export function useKeyboardShortcuts({
     const ids = store.selectedElementIds;
     if (ids.length === 0) return;
 
-    pushHistoryImmediate(store.elements);
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     const nextZIndex =
       Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
@@ -74,29 +74,22 @@ export function useKeyboardShortcuts({
       const originalObj = el ? findFabricObjectById(canvas, id) : undefined;
       if (!el || !originalObj) return;
 
-      const newId = generateId();
-
-      const cloned: Record<string, unknown> = { ...el };
-      cloned.id = newId;
+      const cloned = deepCloneElementWithNewIds(el);
       cloned.name = `${el.name} copy`;
       cloned.x = el.x + 15;
       cloned.y = el.y + 15;
       cloned.zIndex = nextZIndex + ids.indexOf(id);
 
-      if (el.type === 'image') {
-        cloned.assetId = generateId();
-      }
-
       originalObj.clone().then((clonedObj) => {
         clonedObj.set({
-          left: el.x + 15,
-          top: el.y + 15,
+          left: cloned.x,
+          top: cloned.y,
         });
-        setElementId(clonedObj, newId);
+        setElementId(clonedObj, cloned.id);
         canvas.add(clonedObj);
         canvas.requestRenderAll();
 
-        store.addElement(cloned as unknown as AnyElement);
+        store.addElement(cloned);
       });
     });
   }, [canvasInstanceRef, isTextEditingRef]);
@@ -105,11 +98,21 @@ export function useKeyboardShortcuts({
     if (isTextEditingRef.current) return;
 
     const store = useEditorStore.getState();
-    const restored = undo(store.elements);
+    const selectedIds = store.selectedElementIds;
+    const restored = undo(store.activePageId, {
+      elements: store.elements,
+      pageBackground: store.pageBackground,
+    });
     if (!restored) return;
 
-    store.setElements(restored);
-    store.setSelectedElementIds([]);
+    store.setElements(restored.elements);
+    store.setPageBackground(restored.pageBackground);
+
+    const validIds = selectedIds.filter((id) =>
+      restored.elements.some((el) => el.id === id),
+    );
+    store.setSelectedElementIds(validIds);
+
     store.triggerRebuildCanvas();
   }, [isTextEditingRef]);
 
@@ -117,11 +120,21 @@ export function useKeyboardShortcuts({
     if (isTextEditingRef.current) return;
 
     const store = useEditorStore.getState();
-    const restored = redo(store.elements);
+    const selectedIds = store.selectedElementIds;
+    const restored = redo(store.activePageId, {
+      elements: store.elements,
+      pageBackground: store.pageBackground,
+    });
     if (!restored) return;
 
-    store.setElements(restored);
-    store.setSelectedElementIds([]);
+    store.setElements(restored.elements);
+    store.setPageBackground(restored.pageBackground);
+
+    const validIds = selectedIds.filter((id) =>
+      restored.elements.some((el) => el.id === id),
+    );
+    store.setSelectedElementIds(validIds);
+
     store.triggerRebuildCanvas();
   }, [isTextEditingRef]);
 
@@ -144,36 +157,38 @@ export function useKeyboardShortcuts({
     const clipboard = store.clipboard;
     if (clipboard.length === 0) return;
 
-    pushHistoryImmediate(store.elements);
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     const offset = store.pasteOffset * 15;
     const nextZIndex =
       Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
 
-    clipboard.forEach(async (el) => {
+    const pasteOperations = clipboard.map(async (el, i) => {
       const newId = generateId();
+      const base = deepCloneElementWithNewIds(el);
       const newEl = {
-        ...el,
+        ...base,
         id: newId,
-        name: el.name,
         x: el.x + offset,
         y: el.y + offset,
-        zIndex: nextZIndex + clipboard.indexOf(el),
-      };
+        zIndex: nextZIndex + i,
+      } as AnyElement;
 
-      if (newEl.type === 'image') {
-        (newEl as ImageElement).assetId = generateId();
-      }
-
-      const fabricObj = await createFabricObject(newEl as AnyElement);
+      const fabricObj = await createFabricObject(newEl);
 
       setElementId(fabricObj, newId);
       canvas.add(fabricObj);
-      canvas.requestRenderAll();
-      store.addElement(newEl as AnyElement);
+
+      return newEl as AnyElement;
     });
 
-    store.incrementPasteOffset();
+    Promise.all(pasteOperations).then((newElements) => {
+      newElements.forEach((newEl) => {
+        store.addElement(newEl);
+      });
+      canvas.requestRenderAll();
+      store.incrementPasteOffset();
+    });
   }, [canvasInstanceRef, isTextEditingRef]);
 
   const handleArrowMove = useCallback(
@@ -198,7 +213,7 @@ export function useKeyboardShortcuts({
       else if (key === 'ArrowRight') dx = STEP;
       else return;
 
-      pushHistoryDebounced(store.elements);
+      pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);
 
       ids.forEach((id) => {
         const el = store.elements.find((e) => e.id === id);
@@ -235,7 +250,7 @@ export function useKeyboardShortcuts({
     );
     if (childObjs.length < 2) return;
 
-    pushHistoryImmediate(store.elements);
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     const groupId = generateId();
     const group = new Group(childObjs, {
@@ -295,7 +310,7 @@ export function useKeyboardShortcuts({
     const groupEl = store.elements.find((e) => e.id === selectedId);
     if (!groupEl || groupEl.type !== 'group') return;
 
-    pushHistoryImmediate(store.elements);
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     const groupObj = findFabricObjectById(canvas, selectedId);
     if (!groupObj || !(groupObj instanceof Group)) return;
@@ -314,7 +329,7 @@ export function useKeyboardShortcuts({
         x: childObj.left ?? childEl.x,
         y: childObj.top ?? childEl.y,
         width: childObj.width ?? childEl.width,
-        height: childObj.height ?? childEl.height,
+        height: childObj.height ?? childObj.height,
         scaleX: childObj.scaleX ?? childEl.scaleX,
         scaleY: childObj.scaleY ?? childEl.scaleY,
         rotation: childObj.angle ?? childEl.rotation,

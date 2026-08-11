@@ -70,6 +70,9 @@ function extractCommonUpdates(
 }
 
 export function normalizeFabricObject(fabricObject: FabricObject): void {
+  if (fabricObject instanceof Group) return;
+  if (fabricObject instanceof Line) return;
+
   const sx = fabricObject.scaleX ?? 1;
   const sy = fabricObject.scaleY ?? 1;
 
@@ -190,23 +193,27 @@ function extractImageFilters(image: FabricImage): ImageFilters {
 }
 
 async function createImageObject(element: ImageElement): Promise<FabricImage> {
-  const image = await FabricImage.fromURL(element.src, undefined, {
-    left: element.x,
-    top: element.y,
-    scaleX: element.scaleX,
-    scaleY: element.scaleY,
-    angle: element.rotation,
-    opacity: element.opacity,
-    visible: element.visible,
-    cropX: element.cropX,
-    cropY: element.cropY,
-  });
+  try {
+    const image = await FabricImage.fromURL(element.src, undefined, {
+      left: element.x,
+      top: element.y,
+      scaleX: element.scaleX,
+      scaleY: element.scaleY,
+      angle: element.rotation,
+      opacity: element.opacity,
+      visible: element.visible,
+      cropX: element.cropX,
+      cropY: element.cropY,
+    });
 
-  setElementId(image, element.id);
+    setElementId(image, element.id);
 
-  applyImageFilters(image, element.filters);
+    applyImageFilters(image, element.filters);
 
-  return image;
+    return image;
+  } catch {
+    return Promise.reject(new Error(`Failed to load image: ${element.src}`));
+  }
 }
 
 function createShapeObject(element: ShapeElement): Rect | Circle | Line {
@@ -244,7 +251,7 @@ function createShapeObject(element: ShapeElement): Rect | Circle | Line {
     }
     case 'line':
       shape = new Line(
-        [element.x, element.y, element.x + element.width, element.y + element.height],
+        [element.x, element.y, element.x + element.width, element.y],
         {
           stroke: element.stroke,
           strokeWidth: element.strokeWidth,
@@ -292,7 +299,8 @@ export function extractElementUpdates(
   const common = extractCommonUpdates(fabricObject);
 
   switch (elementType) {
-    case 'text':
+    case 'text': {
+      const fill = (fabricObject as FabricText).fill;
       return {
         ...common,
         text: (fabricObject as FabricText).text,
@@ -304,10 +312,11 @@ export function extractElementUpdates(
           | 'left'
           | 'center'
           | 'right',
-        fill: (fabricObject as FabricText).fill as string,
+        fill: typeof fill === 'string' ? fill : '#000000',
         letterSpacing: (fabricObject as FabricText).charSpacing,
         lineHeight: (fabricObject as FabricText).lineHeight,
       };
+    }
     case 'image':
       return {
         ...common,
@@ -317,13 +326,26 @@ export function extractElementUpdates(
         flipY: (fabricObject as FabricImage).flipY,
         filters: extractImageFilters(fabricObject as FabricImage),
       };
-    case 'shape':
-      return {
-        ...common,
-        fill: (fabricObject as Rect | Circle).fill as string,
-        stroke: (fabricObject as Rect | Circle).stroke as string,
-        strokeWidth: (fabricObject as Rect | Circle).strokeWidth as number,
+    case 'shape': {
+      const shape = fabricObject as Rect | Circle | Line;
+      const shapeFill = shape.fill;
+      const shapeStroke = shape.stroke;
+      const baseUpdates = {
+        fill: typeof shapeFill === 'string' ? shapeFill : '#000000',
+        stroke: typeof shapeStroke === 'string' ? shapeStroke : '#3b82f6',
+        strokeWidth: typeof shape.strokeWidth === 'number' ? shape.strokeWidth : 2,
       };
+
+      if (shape instanceof Line) {
+        return {
+          ...common,
+          ...baseUpdates,
+          width: Math.abs(shape.x2 - shape.x1) || common.width || 1,
+          height: Math.abs(shape.y2 - shape.y1) || common.height || 1,
+        };
+      }
+      return { ...common, ...baseUpdates };
+    }
     case 'group':
       return common;
   }

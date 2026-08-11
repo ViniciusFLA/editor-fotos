@@ -11,12 +11,10 @@ export function useAutoSave() {
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstRender = useRef(true);
-  const lastElementsRef = useRef(elements);
 
   useEffect(() => {
     if (isFirstRender.current) {
       isFirstRender.current = false;
-      lastElementsRef.current = elements;
       return;
     }
 
@@ -42,8 +40,4 @@ export function useAutoSave() {
       }
     };
   }, [elements, pages, pageBackground, projectName]);
-
-  useEffect(() => {
-    lastElementsRef.current = elements;
-  });
 }

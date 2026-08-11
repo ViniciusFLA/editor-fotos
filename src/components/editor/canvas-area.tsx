@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { FabricImage, FabricText, FabricObject, Rect, Circle, Line } from 'fabric';
+import { FabricImage, FabricText, FabricObject, Rect, Circle, Line, ActiveSelection } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useEditorStore } from '@/stores/editor-store';
@@ -53,13 +53,15 @@ export function CanvasArea() {
   const triggeredExport = useEditorStore((s) => s.triggeredExport);
   const exportFormat = useEditorStore((s) => s.exportFormat);
   const exportScale = useEditorStore((s) => s.exportScale);
+  const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
 
   const insertImage = useCallback(
     async (src: string) => {
       const canvas = canvasInstanceRef.current;
       if (!canvas) return;
 
-      pushHistoryImmediate(useEditorStore.getState().elements);
+      const store = useEditorStore.getState();
+      pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
       try {
         const fabricImage = await FabricImage.fromURL(src);
@@ -150,15 +152,15 @@ export function CanvasArea() {
     const canvas = canvasInstanceRef.current;
     if (!canvas) return;
 
-    pushHistoryImmediate(useEditorStore.getState().elements);
-    if (!canvas) return;
+    const store = useEditorStore.getState();
+    pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
     const id = generateId();
 
     const nextZIndex =
       Math.max(
         0,
-        ...useEditorStore.getState().elements.map((el) => el.zIndex),
+        ...store.elements.map((el) => el.zIndex),
       ) + 1;
 
     const textElement: TextElement = {
@@ -210,7 +212,7 @@ export function CanvasArea() {
     canvas.setActiveObject(fabricText);
     canvas.requestRenderAll();
 
-    useEditorStore.getState().addElement(textElement);
+    store.addElement(textElement);
   }, [canvasInstanceRef]);
 
   const insertShape = useCallback(
@@ -218,14 +220,15 @@ export function CanvasArea() {
       const canvas = canvasInstanceRef.current;
       if (!canvas) return;
 
-      pushHistoryImmediate(useEditorStore.getState().elements);
+      const store = useEditorStore.getState();
+      pushHistoryImmediate(store.activePageId, store.elements, store.pageBackground);
 
       const id = generateId();
 
       const nextZIndex =
         Math.max(
           0,
-          ...useEditorStore.getState().elements.map((el) => el.zIndex),
+          ...store.elements.map((el) => el.zIndex),
         ) + 1;
 
       const defaults = {
@@ -309,7 +312,7 @@ export function CanvasArea() {
       canvas.setActiveObject(fabricObj);
       canvas.requestRenderAll();
 
-      useEditorStore.getState().addElement(shapeElement);
+      store.addElement(shapeElement);
     },
     [canvasInstanceRef],
   );
@@ -326,6 +329,29 @@ export function CanvasArea() {
 
     insertShape(pendingShapeType);
   }, [triggeredShapeAdd, canvasReady, insertShape, pendingShapeType]);
+
+  const restoreSelectionAfterRebuild = useCallback((canvas: import('fabric').Canvas) => {
+    const store = useEditorStore.getState();
+    const ids = store.selectedElementIds;
+    if (ids.length === 0) return;
+
+    const objects = ids
+      .map((id) => findFabricObjectById(canvas, id))
+      .filter((o): o is NonNullable<typeof o> => o != null);
+
+    if (objects.length === 0) {
+      store.setSelectedElementIds([]);
+      return;
+    }
+
+    if (objects.length === 1) {
+      canvas.setActiveObject(objects[0]);
+    } else {
+      canvas.setActiveObject(new ActiveSelection(objects, { canvas }));
+    }
+
+    canvas.requestRenderAll();
+  }, []);
 
   useEffect(() => {
     if (rebuildCanvasVersion === 0) return;
@@ -345,6 +371,10 @@ export function CanvasArea() {
           setElementId(resolved, el.id);
           canvas.add(resolved);
           canvas.requestRenderAll();
+
+          restoreSelectionAfterRebuild(canvas);
+        }).catch(() => {
+          // element failed to rebuild — skip it, continue with others
         });
       } else {
         setElementId(fabricObj, el.id);
@@ -353,7 +383,9 @@ export function CanvasArea() {
     });
 
     canvas.requestRenderAll();
-  }, [rebuildCanvasVersion, canvasReady, canvasInstanceRef]);
+
+    restoreSelectionAfterRebuild(canvas);
+  }, [rebuildCanvasVersion, canvasReady, canvasInstanceRef, restoreSelectionAfterRebuild]);
 
   const prevElementRef = useRef<string | null>(null);
 
@@ -518,15 +550,14 @@ export function CanvasArea() {
   }, [triggeredExport, canvasReady, exportFormat, exportScale, canvasInstanceRef]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
-  const selectedIds = useEditorStore((s) => s.selectedElementIds);
-  const elementCount = useEditorStore((s) => s.elements.length);
   const clipboardItems = useEditorStore((s) => s.clipboard);
+  const elementCount = useEditorStore((s) => s.elements.length);
 
   const contextMenuItems = useMemo<ContextMenuItem[]>(() => {
-    const hasSelection = selectedIds.length > 0;
-    const hasMultiple = selectedIds.length >= 2;
-    const isGroup = selectedIds.length === 1 &&
-      useEditorStore.getState().elements.find((e) => e.id === selectedIds[0])?.type === 'group';
+    const hasSelection = selectedElementIds.length > 0;
+    const hasMultiple = selectedElementIds.length >= 2;
+    const isGroup = selectedElementIds.length === 1 &&
+      useEditorStore.getState().elements.find((e) => e.id === selectedElementIds[0])?.type === 'group';
     const hasClipboard = clipboardItems.length > 0;
 
     return [
@@ -575,7 +606,7 @@ export function CanvasArea() {
         onClick: () => handleUngroup(),
       },
     ];
-  }, [selectedIds, clipboardItems, handlePaste, handleDuplicate, handleDelete, handleGroup, handleUngroup]);
+  }, [selectedElementIds, clipboardItems, handlePaste, handleDuplicate, handleDelete, handleGroup, handleUngroup]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();

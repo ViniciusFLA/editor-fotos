@@ -78,11 +78,13 @@ export function RightPanel() {
 
   const handleChange = useCallback(
     (updates: Partial<AnyElement>) => {
-      if (!element) return;
-      pushHistoryDebounced(useEditorStore.getState().elements);
-      updateElement(element.id, updates);
+      const store = useEditorStore.getState();
+      const currentId = store.selectedElementIds[0];
+      if (!currentId) return;
+      pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);
+      updateElement(currentId, updates);
     },
-    [element, updateElement],
+    [updateElement],
   );
 
   const handleFontChange = useCallback(
@@ -91,15 +93,21 @@ export function RightPanel() {
 
       if (isGoogleFont(family) && !isFontLoaded(family)) {
         setLoadingFont(family);
-        const loaded = await loadGoogleFont(family);
-        setLoadingFont(null);
-
-        if (loaded) {
-          triggerFontReload();
+        try {
+          const loaded = await loadGoogleFont(family);
+          if (loaded) {
+            triggerFontReload();
+          }
+        } catch {
+          // font load failed — keep current font, fontFamily not changed
+          setLoadingFont(null);
+          return;
         }
+        setLoadingFont(null);
       }
 
-      pushHistoryDebounced(useEditorStore.getState().elements);
+      const store = useEditorStore.getState();
+      pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);
       updateElement(element.id, { fontFamily: family });
     },
     [element, updateElement, triggerFontReload],
@@ -107,6 +115,8 @@ export function RightPanel() {
 
   const handleBackgroundChange = useCallback(
     (updates: Partial<PageBackground>) => {
+      const store = useEditorStore.getState();
+      pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);
       setPageBackground({ ...pageBackground, ...updates });
     },
     [pageBackground, setPageBackground],
@@ -462,7 +472,8 @@ export function RightPanel() {
               <div className='flex items-center gap-0.5'>
                 <button
                   onClick={() => {
-                    pushHistoryDebounced(useEditorStore.getState().elements);
+                    const s = useEditorStore.getState();
+                    pushHistoryDebounced(s.activePageId, s.elements, s.pageBackground);
                     setCropMode(null);
                   }}
                   className='flex items-center gap-1 h-5 px-1.5 rounded text-[10px] bg-green-600 text-white hover:bg-green-700 transition-colors'
@@ -493,14 +504,16 @@ export function RightPanel() {
               </div>
             ) : (
               <button
-                onClick={() =>
+                onClick={() => {
+                  const s = useEditorStore.getState();
+                  pushHistoryDebounced(s.activePageId, s.elements, s.pageBackground);
                   setCropMode(element.id, {
                     cropX: imageEl.cropX,
                     cropY: imageEl.cropY,
                     width: imageEl.width,
                     height: imageEl.height,
-                  })
-                }
+                  });
+                }}
                 className='flex items-center gap-1 h-5 px-1.5 rounded text-[10px] bg-muted hover:bg-muted/80 transition-colors text-muted-foreground'
                 title='Enter Crop Mode'
               >

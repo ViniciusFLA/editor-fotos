@@ -44,10 +44,12 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
       onClick={(e) => e.stopPropagation()}
       role='menu'
     >
-      {items.map((item, i) => (
-        <div key={i}>
-          {item.separator && i > 0 && <div className='mx-2 my-1 border-t' />}
-          <button
+      {items.map((item, i) => {
+        const key = item.label || `separator-${i}`;
+        return (
+          <div key={key}>
+            {item.separator && i > 0 && <div className='mx-2 my-1 border-t' />}
+            <button
             className={`flex items-center gap-2 w-full px-3 py-1.5 text-[12px] transition-colors text-left ${
               item.disabled
                 ? 'opacity-30 cursor-default'
@@ -72,7 +74,8 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps) {
             )}
           </button>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
