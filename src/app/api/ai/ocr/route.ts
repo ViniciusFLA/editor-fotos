@@ -1,14 +1,27 @@
 import { NextResponse } from 'next/server';
-import { GoogleOCRProvider } from '@/ai/providers/google-ocr-provider';
 import { AIProviderError } from '@/ai/errors/ai-error';
+import { PaddleOCRProvider } from '@/ai/providers/paddle-ocr-provider';
+import { GoogleOCRProvider } from '@/ai/providers/google-ocr-provider';
+import type { OCRProvider } from '@/ai/providers/ocr-provider';
 import type { OCRInput } from '@/ai/types/ocr';
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
-function getProvider(): GoogleOCRProvider | null {
+function getProvider(): OCRProvider | null {
+  const providerType = process.env.OCR_PROVIDER || 'google-cloud-vision';
+
+  if (providerType === 'paddleocr') {
+    const serviceUrl = process.env.OCR_SERVICE_URL;
+    const token = process.env.OCR_SERVICE_TOKEN;
+    if (!serviceUrl || !token) return null;
+    return new PaddleOCRProvider({ serviceUrl, token });
+  }
+
+  // Fallback to Google Cloud Vision
   const apiKey = process.env.OCR_API_KEY;
   if (!apiKey) return null;
+
   return new GoogleOCRProvider({ apiKey });
 }
 
@@ -17,11 +30,15 @@ function errorResponse(code: string, message: string, status: number, retryable 
 }
 
 export async function GET() {
+  const providerType = process.env.OCR_PROVIDER || 'google-cloud-vision';
+
+  if (providerType === 'paddleocr') {
+    const configured = !!process.env.OCR_SERVICE_URL && !!process.env.OCR_SERVICE_TOKEN;
+    return NextResponse.json({ configured, provider: configured ? 'paddleocr' : null });
+  }
+
   const configured = !!process.env.OCR_API_KEY;
-  return NextResponse.json({
-    configured,
-    provider: configured ? 'google-cloud-vision' : null,
-  });
+  return NextResponse.json({ configured, provider: configured ? 'google-cloud-vision' : null });
 }
 
 export async function POST(request: Request) {
@@ -31,31 +48,22 @@ export async function POST(request: Request) {
   }
 
   const contentType = (request.headers.get('content-type') ?? '').toLowerCase();
-
   let imageBase64: string;
 
   if (contentType.includes('multipart/form-data')) {
     try {
       const formData = await request.formData();
       const file = formData.get('file');
-
       if (!file || !(file instanceof File)) {
         return errorResponse('INVALID_INPUT', 'Missing file in multipart body', 400);
       }
-
       if (file.size > MAX_FILE_SIZE) {
         return errorResponse('INVALID_INPUT', 'File too large', 400);
       }
-
       const fileType = file.type;
       if (fileType && !ALLOWED_MIME_TYPES.includes(fileType)) {
-        return errorResponse(
-          'UNSUPPORTED_INPUT',
-          `Unsupported image type: ${fileType}. Allowed: png, jpeg, webp`,
-          415,
-        );
+        return errorResponse('UNSUPPORTED_INPUT', `Unsupported image type: ${fileType}`, 415);
       }
-
       const buffer = await file.arrayBuffer();
       imageBase64 = Buffer.from(buffer).toString('base64');
     } catch {
@@ -63,40 +71,25 @@ export async function POST(request: Request) {
     }
   } else {
     let body: Record<string, unknown>;
-    try {
-      body = await request.json();
-    } catch {
-      return errorResponse('INVALID_INPUT', 'Invalid JSON body', 400);
-    }
-
+    try { body = await request.json(); } catch { return errorResponse('INVALID_INPUT', 'Invalid JSON body', 400); }
     const imageObj = body.image as Record<string, unknown> | undefined;
-    const b64 =
-      (typeof body.base64 === 'string' ? body.base64 : undefined) ??
-      (typeof imageObj?.base64 === 'string' ? imageObj.base64 : undefined);
-
+    const b64 = (typeof body.base64 === 'string' ? body.base64 : undefined) ?? (typeof imageObj?.base64 === 'string' ? imageObj.base64 : undefined);
     if (typeof b64 !== 'string' || b64.length === 0) {
-      return errorResponse(
-        'INVALID_INPUT',
-        'Missing image. Send as multipart/form-data (file field) or JSON with { image: { base64: "..." } }',
-        400,
-      );
+      return errorResponse('INVALID_INPUT', 'Missing image', 400);
     }
-
     imageBase64 = b64.replace(/^data:image\/\w+;base64,/, '');
   }
 
   if (imageBase64.length > MAX_FILE_SIZE * 1.4) {
-    return errorResponse('INVALID_INPUT', 'Image too large after encoding', 400);
+    return errorResponse('INVALID_INPUT', 'Image too large', 400);
   }
 
   const provider = getProvider();
   if (!provider) {
-    return errorResponse('AUTHENTICATION', 'OCR API key not configured', 503);
+    return errorResponse('AUTHENTICATION', 'OCR not configured', 503);
   }
 
-  const input: OCRInput = {
-    image: { base64: imageBase64 },
-  };
+  const input: OCRInput = { image: { base64: imageBase64 } };
 
   try {
     const result = await provider.detectText(input);
@@ -104,25 +97,12 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof AIProviderError) {
       const statusMap: Record<string, number> = {
-        AUTHENTICATION: 401,
-        INVALID_INPUT: 400,
-        UNSUPPORTED_INPUT: 415,
-        RATE_LIMIT: 429,
-        TIMEOUT: 504,
-        NETWORK: 502,
-        PROVIDER_ERROR: 502,
-        INVALID_RESPONSE: 502,
-        CANCELLED: 499,
-        UNKNOWN: 500,
+        AUTHENTICATION: 401, INVALID_INPUT: 400, UNSUPPORTED_INPUT: 415,
+        RATE_LIMIT: 429, TIMEOUT: 504, NETWORK: 502,
+        PROVIDER_ERROR: 502, INVALID_RESPONSE: 502, CANCELLED: 499, UNKNOWN: 500,
       };
-      return errorResponse(
-        error.code,
-        error.message,
-        statusMap[error.code] ?? 500,
-        error.retryable,
-      );
+      return errorResponse(error.code, error.message, statusMap[error.code] ?? 500, error.retryable);
     }
-
     return errorResponse('UNKNOWN', 'Internal server error', 500);
   }
 }

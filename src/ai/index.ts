@@ -45,6 +45,7 @@ export { createAIProviders } from './providers/registry';
 // Concrete OCR providers
 export { GoogleOCRProvider } from './providers/google-ocr-provider';
 export { FakeOCRProvider } from './providers/fake-ocr-provider';
+export { PaddleOCRProvider } from './providers/paddle-ocr-provider';
 
 // OCR normalizers
 export { normalizeGoogleOCRResponse } from './normalizers/ocr-normalizer';
