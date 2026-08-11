@@ -303,27 +303,39 @@ export class GoogleOCRProvider implements OCRProvider {
 
   private async handleHttpError(response: Response): Promise<never> {
     const status = response.status;
+    let googleMsg = `HTTP ${status}`;
+    let googleCode: string | undefined;
+
+    try {
+      const body = await response.text();
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      const errObj = (parsed.error as Record<string, unknown>) ?? null;
+      if (typeof errObj?.message === 'string') googleMsg = errObj.message as string;
+      if (typeof errObj?.code === 'number') googleCode = String(errObj.code);
+    } catch {
+      // ignore parse failures
+    }
 
     if (status === 401 || status === 403) {
       throw new AIProviderError(
         AIErrorCode.AUTHENTICATION,
-        'Google Cloud Vision authentication failed — check API key',
-        { provider: this.id },
+        `Google Cloud Vision authentication failed: ${googleMsg}`,
+        { provider: this.id, metadata: { googleStatus: status, googleCode } },
       );
     }
 
     if (status === 429) {
       throw new AIProviderError(
         AIErrorCode.RATE_LIMIT,
-        'Google Cloud Vision rate limit exceeded',
-        { provider: this.id, retryable: true },
+        `Google Cloud Vision rate limit exceeded: ${googleMsg}`,
+        { provider: this.id, retryable: true, metadata: { googleStatus: status, googleCode } },
       );
     }
 
     throw new AIProviderError(
       AIErrorCode.PROVIDER_ERROR,
-      `Google Cloud Vision returned HTTP ${status}`,
-      { provider: this.id, retryable: status >= 500 },
+      `Google Cloud Vision error: ${googleMsg}`,
+      { provider: this.id, retryable: status >= 500, metadata: { googleStatus: status, googleCode } },
     );
   }
 }
