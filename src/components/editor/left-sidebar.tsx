@@ -15,24 +15,26 @@ import {
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
 import { validateImageFile } from '@/lib/image-validation';
+import { useTranslation } from '@/i18n';
 import type { ShapeType } from '@/types';
 
 const tabs = [
-  { id: 'uploads', icon: Upload, label: 'Uploads' },
-  { id: 'text', icon: Type, label: 'Text' },
-  { id: 'elements', icon: Square, label: 'Elements' },
-  { id: 'images', icon: ImageIcon, label: 'Images' },
-  { id: 'layers', icon: Layers, label: 'Layers' },
-  { id: 'ai', icon: Sparkles, label: 'AI' },
+  { id: 'uploads', icon: Upload, labelKey: 'editor.sidebar.uploads' as const },
+  { id: 'text', icon: Type, labelKey: 'editor.sidebar.text' as const },
+  { id: 'elements', icon: Square, labelKey: 'editor.sidebar.elements' as const },
+  { id: 'images', icon: ImageIcon, labelKey: 'editor.sidebar.images' as const },
+  { id: 'layers', icon: Layers, labelKey: 'editor.sidebar.layers' as const },
+  { id: 'ai', icon: Sparkles, labelKey: 'editor.sidebar.ai' as const },
 ] as const;
 
-const shapeOptions: { icon: React.ComponentType<{ className?: string }>; type: ShapeType; label: string }[] = [
-  { icon: RectangleHorizontal, type: 'rectangle', label: 'Rectangle' },
-  { icon: Circle, type: 'circle', label: 'Circle' },
-  { icon: Minus, type: 'line', label: 'Line' },
+const shapeOptions: { icon: React.ComponentType<{ className?: string }>; type: ShapeType; labelKey: string }[] = [
+  { icon: RectangleHorizontal, type: 'rectangle', labelKey: 'editor.sidebar.shapes.rectangle' },
+  { icon: Circle, type: 'circle', labelKey: 'editor.sidebar.shapes.circle' },
+  { icon: Minus, type: 'line', labelKey: 'editor.sidebar.shapes.line' },
 ];
 
 export function LeftSidebar() {
+  const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const setPendingImageSrc = useEditorStore((s) => s.setPendingImageSrc);
   const setUploadError = useEditorStore((s) => s.setUploadError);
@@ -68,7 +70,6 @@ export function LeftSidebar() {
     },
     [
       triggerTextAdd,
-      triggerShapeAdd,
       activeSidebarTab,
       setActiveSidebarTab,
     ],
@@ -130,7 +131,7 @@ export function LeftSidebar() {
             size='icon'
             className={`h-10 w-12 rounded-none ${isActive ? 'bg-muted' : ''}`}
             title={
-              uploadError && tab.id === 'uploads' ? uploadError : tab.label
+              uploadError && tab.id === 'uploads' ? uploadError : t(tab.labelKey)
             }
             onClick={() => handleTabClick(tab.id)}
           >
@@ -154,10 +155,10 @@ export function LeftSidebar() {
               key={opt.type}
               className='flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-muted text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap'
               onClick={() => handleShapeClick(opt.type)}
-              title={opt.label}
+              title={t(opt.labelKey)}
             >
               <opt.icon className='h-3.5 w-3.5' />
-              <span>{opt.label}</span>
+              <span>{t(opt.labelKey)}</span>
             </button>
           ))}
         </div>

@@ -2,10 +2,12 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { Undo2, Redo2, Eye, Ungroup, Group, Check, Loader2, AlertCircle, Download, FileImage } from 'lucide-react';
+import { Undo2, Redo2, Eye, Ungroup, Group, Check, Loader2, AlertCircle, Download, FileImage, Globe } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
+import { useTranslation, type Locale } from '@/i18n';
 
 export function TopToolbar() {
+  const { t, locale, setLocale } = useTranslation();
   const triggerUndo = useEditorStore((s) => s.triggerUndo);
   const triggerRedo = useEditorStore((s) => s.triggerRedo);
   const triggerGroup = useEditorStore((s) => s.triggerGroup);
@@ -23,6 +25,10 @@ export function TopToolbar() {
   const exportRef = useRef<HTMLDivElement>(null);
   const exportBtnRef = useRef<HTMLButtonElement>(null);
 
+  const [showLang, setShowLang] = useState(false);
+  const langRef = useRef<HTMLDivElement>(null);
+  const langBtnRef = useRef<HTMLButtonElement>(null);
+
   useEffect(() => {
     if (showExport) {
       const handleClickOutside = (e: MouseEvent) => {
@@ -39,6 +45,23 @@ export function TopToolbar() {
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showExport]);
+
+  useEffect(() => {
+    if (showLang) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          langRef.current &&
+          !langRef.current.contains(e.target as Node) &&
+          langBtnRef.current &&
+          !langBtnRef.current.contains(e.target as Node)
+        ) {
+          setShowLang(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showLang]);
 
   useEffect(() => {
     if (editingName && nameInputRef.current) {
@@ -80,7 +103,7 @@ export function TopToolbar() {
               setNameValue(projectName);
               setEditingName(true);
             }}
-            title='Double-click to rename'
+            title={t('editor.toolbar.rename')}
           >
             {projectName}
           </span>
@@ -88,16 +111,22 @@ export function TopToolbar() {
 
         <span className='text-[11px] text-muted-foreground'>
           {saveStatus === 'saved' && (
-            <Check className='h-3 w-3 text-green-500' />
+            <span title={t('editor.save.saved')}>
+              <Check className='h-3 w-3 text-green-500' />
+            </span>
           )}
           {saveStatus === 'saving' && (
-            <Loader2 className='h-3 w-3 animate-spin text-muted-foreground' />
+            <span title={t('editor.save.saving')}>
+              <Loader2 className='h-3 w-3 animate-spin text-muted-foreground' />
+            </span>
           )}
           {saveStatus === 'unsaved' && (
-            <span className='text-amber-500'>●</span>
+            <span className='text-amber-500' title={t('editor.save.unsaved')}>●</span>
           )}
           {saveStatus === 'error' && (
-            <AlertCircle className='h-3 w-3 text-destructive' />
+            <span title={t('editor.save.error')}>
+              <AlertCircle className='h-3 w-3 text-destructive' />
+            </span>
           )}
         </span>
       </div>
@@ -108,7 +137,7 @@ export function TopToolbar() {
           size='icon'
           className='h-8 w-8'
           onClick={() => triggerUndo()}
-          title='Undo (Ctrl+Z)'
+          title={`${t('editor.toolbar.undo')} (Ctrl+Z)`}
         >
           <Undo2 className='h-4 w-4' />
         </Button>
@@ -117,7 +146,7 @@ export function TopToolbar() {
           size='icon'
           className='h-8 w-8'
           onClick={() => triggerRedo()}
-          title='Redo (Ctrl+Shift+Z)'
+          title={`${t('editor.toolbar.redo')} (Ctrl+Shift+Z)`}
         >
           <Redo2 className='h-4 w-4' />
         </Button>
@@ -127,7 +156,7 @@ export function TopToolbar() {
           size='icon'
           className='h-8 w-8'
           onClick={() => triggerGroup()}
-          title='Group (Ctrl+G)'
+          title={`${t('editor.toolbar.group')} (Ctrl+G)`}
         >
           <Group className='h-4 w-4' />
         </Button>
@@ -136,16 +165,55 @@ export function TopToolbar() {
           size='icon'
           className='h-8 w-8'
           onClick={() => triggerUngroup()}
-          title='Ungroup (Ctrl+Shift+G)'
+          title={`${t('editor.toolbar.ungroup')} (Ctrl+Shift+G)`}
         >
           <Ungroup className='h-4 w-4' />
         </Button>
       </div>
 
       <div className='flex items-center gap-2 relative'>
+        <div className='relative'>
+          <Button
+            ref={langBtnRef as React.Ref<HTMLButtonElement>}
+            variant='ghost'
+            size='sm'
+            className='h-8 gap-1'
+            onClick={() => setShowLang(!showLang)}
+            title={t('editor.language.label')}
+          >
+            <Globe className='h-3.5 w-3.5' />
+            <span className='text-[10px]'>{locale === 'pt-BR' ? 'PT' : locale === 'en' ? 'EN' : 'ES'}</span>
+          </Button>
+
+          {showLang && (
+            <div
+              ref={langRef}
+              className='absolute top-full right-0 mt-1 w-48 bg-card border rounded shadow-lg z-50 py-1'
+            >
+              <div className='px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
+                {t('editor.language.label')}
+              </div>
+              {(['pt-BR', 'en', 'es'] as Locale[]).map((loc) => (
+                <button
+                  key={loc}
+                  className={`flex items-center w-full px-3 py-1 text-[11px] hover:bg-muted transition-colors ${
+                    locale === loc ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => {
+                    setLocale(loc);
+                    setShowLang(false);
+                  }}
+                >
+                  {t(`editor.language.${loc === 'pt-BR' ? 'ptBR' : loc === 'en' ? 'en' : 'es'}` as Parameters<typeof t>[0])}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <Button variant='outline' size='sm' className='h-8' disabled>
           <Eye className='mr-1.5 h-3.5 w-3.5' />
-          Preview
+          {t('editor.toolbar.preview')}
         </Button>
         <Button
           ref={exportBtnRef}
@@ -155,7 +223,7 @@ export function TopToolbar() {
           onClick={() => setShowExport(!showExport)}
         >
           <Download className='mr-1.5 h-3.5 w-3.5' />
-          Export
+          {t('editor.toolbar.export')}
         </Button>
 
         {showExport && (
@@ -164,7 +232,7 @@ export function TopToolbar() {
             className='absolute top-full right-0 mt-1 w-44 bg-card border rounded shadow-lg z-50 py-1'
           >
             <div className='px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Format
+              {t('editor.toolbar.format')}
             </div>
             {(['png', 'jpeg', 'webp'] as const).map((fmt) => (
               <button
@@ -183,7 +251,7 @@ export function TopToolbar() {
 
             <div className='mx-2 my-1 border-t' />
             <div className='px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Scale
+              {t('editor.toolbar.scale')}
             </div>
             {([2, 3] as const).map((s) => (
               <button

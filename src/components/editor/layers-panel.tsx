@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
 import { pushHistoryImmediate } from '@/editor/history/history-manager';
+import { useTranslation } from '@/i18n';
 import type { AnyElement, GroupElement } from '@/types';
 
 const typeIcons: Record<string, typeof Square> = {
@@ -23,6 +24,7 @@ const typeIcons: Record<string, typeof Square> = {
 };
 
 export function LayersPanel() {
+  const { t } = useTranslation();
   const elements = useEditorStore((s) => s.elements);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const setSelectedElementIds = useEditorStore((s) => s.setSelectedElementIds);
@@ -117,11 +119,11 @@ export function LayersPanel() {
       <div className='flex w-48 flex-col border-r bg-card shrink-0'>
         <div className='flex h-10 items-center border-b px-3'>
           <span className='text-xs font-medium text-muted-foreground'>
-            Layers
+            {t('editor.layers.title')}
           </span>
         </div>
         <div className='flex flex-1 items-center justify-center'>
-          <span className='text-xs text-muted-foreground'>No layers</span>
+          <span className='text-xs text-muted-foreground'>{t('editor.layers.empty')}</span>
         </div>
       </div>
     );
@@ -131,7 +133,7 @@ export function LayersPanel() {
     <div className='flex w-48 flex-col border-r bg-card shrink-0'>
       <div className='flex h-10 items-center justify-between border-b px-2'>
         <span className='text-xs font-medium text-muted-foreground'>
-          Layers
+          {t('editor.layers.title')}
         </span>
       </div>
 
@@ -145,7 +147,7 @@ export function LayersPanel() {
           }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
-          title='Bring to Front'
+          title={t('editor.layers.bringToFront')}
         >
           <ChevronsUp className='h-3 w-3 text-muted-foreground' />
         </button>
@@ -158,7 +160,7 @@ export function LayersPanel() {
           }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
-          title='Bring Forward'
+          title={t('editor.layers.bringForward')}
         >
           <ChevronUp className='h-3 w-3 text-muted-foreground' />
         </button>
@@ -171,7 +173,7 @@ export function LayersPanel() {
           }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
-          title='Send Backward'
+          title={t('editor.layers.sendBackward')}
         >
           <ChevronDown className='h-3 w-3 text-muted-foreground' />
         </button>
@@ -184,7 +186,7 @@ export function LayersPanel() {
           }}
           disabled={!selectedId}
           className='flex h-5 w-5 items-center justify-center rounded hover:bg-muted disabled:opacity-30'
-          title='Send to Back'
+          title={t('editor.layers.sendToBack')}
         >
           <ChevronsDown className='h-3 w-3 text-muted-foreground' />
         </button>
@@ -243,7 +245,7 @@ export function LayersPanel() {
                     ? 'text-muted-foreground hover:text-foreground'
                     : 'text-muted-foreground/30 hover:text-muted-foreground'
                 }`}
-                title={el.visible ? 'Hide' : 'Show'}
+                title={el.visible ? t('editor.layers.hide') : t('editor.layers.show')}
               >
                 {el.visible ? (
                   <svg
@@ -282,7 +284,7 @@ export function LayersPanel() {
                 tabIndex={-1}
                 onClick={(e) => handleToggleLocked(el, e)}
                 className='flex h-5 w-5 items-center justify-center text-[11px] shrink-0'
-                title={el.locked ? 'Unlock' : 'Lock'}
+                title={el.locked ? t('editor.layers.unlock') : t('editor.layers.lock')}
               >
                 {el.locked ? (
                   <svg

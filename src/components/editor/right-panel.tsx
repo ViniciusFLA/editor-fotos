@@ -4,6 +4,7 @@ import { useMemo, useCallback, useState } from 'react';
 import { Crop, Check, X, Loader2 } from 'lucide-react';
 import { useEditorStore } from '@/stores/editor-store';
 import { pushHistoryDebounced } from '@/editor/history/history-manager';
+import { useTranslation } from '@/i18n';
 import type { AnyElement, TextElement, ShapeElement, ImageElement, PageBackground } from '@/types';
 import { ALL_FONTS, loadGoogleFont, isGoogleFont, isFontLoaded } from '@/lib/font-loader';
 
@@ -59,6 +60,7 @@ function NumberInput({
 }
 
 export function RightPanel() {
+  const { t } = useTranslation();
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const elements = useEditorStore((s) => s.elements);
   const updateElement = useEditorStore((s) => s.updateElement);
@@ -127,17 +129,17 @@ export function RightPanel() {
       <aside className='flex w-64 flex-col border-l bg-card shrink-0 overflow-y-auto'>
         <div className='flex h-10 items-center border-b px-4 shrink-0'>
           <span className='text-xs font-medium text-muted-foreground'>
-            Page
+            {t('editor.properties.page')}
           </span>
         </div>
 
         <div className='flex flex-col gap-px py-1'>
           <div className='px-3 py-1'>
             <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Background
+              {t('editor.properties.background.title')}
             </span>
           </div>
-          <FieldRow label='Type'>
+          <FieldRow label={t('editor.properties.background.type')}>
             <select
               value={pageBackground.type}
               onChange={(e) =>
@@ -145,11 +147,11 @@ export function RightPanel() {
               }
               className='flex-1 h-6 rounded border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring'
             >
-              <option value='none'>None</option>
-              <option value='color'>Solid Color</option>
-              <option value='image'>Image</option>
-              <option value='linear-gradient'>Linear Gradient</option>
-              <option value='radial-gradient'>Radial Gradient</option>
+              <option value='none'>{t('editor.properties.background.none')}</option>
+              <option value='color'>{t('editor.properties.background.solidColor')}</option>
+              <option value='image'>{t('editor.properties.background.image')}</option>
+              <option value='linear-gradient'>{t('editor.properties.background.linearGradient')}</option>
+              <option value='radial-gradient'>{t('editor.properties.background.radialGradient')}</option>
             </select>
           </FieldRow>
 
@@ -170,7 +172,7 @@ export function RightPanel() {
           )}
 
           {pageBackground.type === 'image' && (
-            <FieldRow label='URL'>
+            <FieldRow label={t('editor.properties.background.url')}>
               <input
                 type='text'
                 value={pageBackground.src}
@@ -195,7 +197,7 @@ export function RightPanel() {
                     }}
                     className='h-5 w-6 rounded border border-border p-0 cursor-pointer'
                   />
-                  <span className='text-[10px] text-muted-foreground'>Start</span>
+                  <span className='text-[10px] text-muted-foreground'>{t('editor.properties.background.start')}</span>
                 </div>
               </FieldRow>
               <FieldRow label='En'>
@@ -210,14 +212,14 @@ export function RightPanel() {
                     }}
                     className='h-5 w-6 rounded border border-border p-0 cursor-pointer'
                   />
-                  <span className='text-[10px] text-muted-foreground'>End</span>
+                  <span className='text-[10px] text-muted-foreground'>{t('editor.properties.background.end')}</span>
                 </div>
               </FieldRow>
             </>
           )}
 
           {pageBackground.type === 'linear-gradient' && (
-            <FieldRow label='Dir'>
+            <FieldRow label={t('editor.properties.background.direction')}>
               <div className='flex flex-1 items-center gap-2'>
                 <input
                   type='range'
@@ -250,14 +252,14 @@ export function RightPanel() {
     <aside className='flex w-64 flex-col border-l bg-card shrink-0 overflow-y-auto'>
       <div className='flex h-10 items-center border-b px-4 shrink-0'>
         <span className='text-xs font-medium text-muted-foreground'>
-          Properties
+          {t('editor.properties.title')}
         </span>
       </div>
 
       <div className='flex flex-col gap-px py-1'>
         <div className='px-3 py-1'>
           <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-            Position
+            {t('editor.properties.position')}
           </span>
         </div>
         <FieldRow label='X'>
@@ -277,7 +279,7 @@ export function RightPanel() {
       <div className='flex flex-col gap-px py-1'>
         <div className='px-3 py-1'>
           <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-            Size
+            {t('editor.properties.size')}
           </span>
         </div>
         <FieldRow label='W'>
@@ -299,7 +301,7 @@ export function RightPanel() {
       <div className='flex flex-col gap-px py-1'>
         <div className='px-3 py-1'>
           <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-            Transform
+            {t('editor.properties.transform')}
           </span>
         </div>
         <FieldRow label='R'>
@@ -331,9 +333,17 @@ export function RightPanel() {
           <div className='flex flex-col gap-px py-1'>
             <div className='px-3 py-1'>
               <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-                Text
+                {t('editor.properties.text.title')}
               </span>
             </div>
+            <FieldRow label={t('editor.properties.text.content')}>
+              <textarea
+                value={textEl.text}
+                onChange={(e) => handleChange({ text: e.target.value })}
+                rows={2}
+                className='flex-1 rounded border border-border bg-background px-1.5 py-0.5 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring resize-none'
+              />
+            </FieldRow>
             <FieldRow label='Sz'>
               <NumberInput
                 value={textEl.fontSize}
@@ -349,14 +359,14 @@ export function RightPanel() {
                   disabled={loadingFont !== null}
                   className='flex-1 h-6 rounded border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50'
                 >
-                  <optgroup label='System Fonts'>
+                  <optgroup label={t('editor.properties.text.systemFonts')}>
                     {ALL_FONTS.filter((f) => f.category === 'system').map((f) => (
                       <option key={f.family} value={f.family} style={{ fontFamily: f.family }}>
                         {f.family}
                       </option>
                     ))}
                   </optgroup>
-                  <optgroup label='Google Fonts'>
+                  <optgroup label={t('editor.properties.text.googleFonts')}>
                     {ALL_FONTS.filter((f) => f.category !== 'system').map((f) => (
                       <option
                         key={f.family}
@@ -380,8 +390,8 @@ export function RightPanel() {
                 onChange={(e) => handleChange({ fontWeight: e.target.value })}
                 className='flex-1 h-6 rounded border border-border bg-background px-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-ring'
               >
-                <option value='normal'>Normal</option>
-                <option value='bold'>Bold</option>
+                <option value='normal'>{t('editor.properties.text.normal')}</option>
+                <option value='bold'>{t('editor.properties.text.bold')}</option>
               </select>
             </FieldRow>
             <FieldRow label='Al'>
@@ -422,10 +432,10 @@ export function RightPanel() {
         <div className='flex flex-col gap-px py-1'>
           <div className='px-3 py-1'>
             <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Shape
+              {t('editor.properties.shape.title')}
             </span>
           </div>
-          <FieldRow label='Fill'>
+          <FieldRow label={t('editor.properties.shape.fill')}>
             <div className='flex items-center gap-2 flex-1'>
               <input
                 type='color'
@@ -438,7 +448,7 @@ export function RightPanel() {
               </span>
             </div>
           </FieldRow>
-          <FieldRow label='Stk'>
+          <FieldRow label={t('editor.properties.shape.stroke')}>
             <div className='flex items-center gap-2 flex-1'>
               <input
                 type='color'
@@ -451,7 +461,7 @@ export function RightPanel() {
               </span>
             </div>
           </FieldRow>
-          <FieldRow label='Sw'>
+          <FieldRow label={t('editor.properties.shape.strokeWidth')}>
             <NumberInput
               value={shapeEl.strokeWidth}
               onChange={(v) => handleChange({ strokeWidth: Math.max(0, v) })}
@@ -466,7 +476,7 @@ export function RightPanel() {
         <div className='flex flex-col gap-px py-1'>
           <div className='flex items-center justify-between px-3 py-1'>
             <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Crop
+              {t('editor.properties.crop.title')}
             </span>
             {isCropMode ? (
               <div className='flex items-center gap-0.5'>
@@ -477,7 +487,7 @@ export function RightPanel() {
                     setCropMode(null);
                   }}
                   className='flex items-center gap-1 h-5 px-1.5 rounded text-[10px] bg-green-600 text-white hover:bg-green-700 transition-colors'
-                  title='Apply Crop'
+                  title={t('editor.properties.crop.apply')}
                 >
                   <Check className='h-3 w-3' />
                 </button>
@@ -497,7 +507,7 @@ export function RightPanel() {
                     setCropMode(null);
                   }}
                   className='flex items-center gap-1 h-5 px-1.5 rounded text-[10px] bg-muted hover:bg-muted/80 transition-colors'
-                  title='Cancel Crop'
+                  title={t('editor.properties.crop.cancel')}
                 >
                   <X className='h-3 w-3' />
                 </button>
@@ -515,10 +525,10 @@ export function RightPanel() {
                   });
                 }}
                 className='flex items-center gap-1 h-5 px-1.5 rounded text-[10px] bg-muted hover:bg-muted/80 transition-colors text-muted-foreground'
-                title='Enter Crop Mode'
+                title={t('editor.properties.crop.enterMode')}
               >
                 <Crop className='h-3 w-3' />
-                Crop
+                {t('editor.properties.crop.enterMode')}
               </button>
             )}
           </div>
@@ -543,7 +553,7 @@ export function RightPanel() {
         <div className='flex flex-col gap-px py-1'>
           <div className='px-3 py-1'>
             <span className='text-[10px] font-semibold uppercase tracking-wider text-muted-foreground'>
-              Filters
+              {t('editor.properties.filters.title')}
             </span>
           </div>
           <FieldRow label='Br'>
@@ -650,7 +660,7 @@ export function RightPanel() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/80'
               }`}
             >
-              {imageEl.filters.grayscale ? 'On' : 'Off'}
+              {imageEl.filters.grayscale ? t('editor.properties.filters.on') : t('editor.properties.filters.off')}
             </button>
           </FieldRow>
         </div>

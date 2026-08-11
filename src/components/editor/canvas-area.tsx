@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { FabricImage, FabricText, FabricObject, Rect, Circle, Line, ActiveSelection } from 'fabric';
+import { FabricImage, IText, FabricObject, Rect, Circle, Line, ActiveSelection } from 'fabric';
 import { useCanvas } from '@/hooks/use-canvas';
 import { useKeyboardShortcuts } from '@/hooks/use-keyboard-shortcuts';
 import { useEditorStore } from '@/stores/editor-store';
@@ -16,6 +16,7 @@ import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import { validateImageFile } from '@/lib/image-validation';
 import { downloadDataUrl, getExportFileName } from '@/lib/export-utils';
 import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
+import { useTranslation } from '@/i18n';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
 import type { ImageElement, TextElement, ShapeElement } from '@/types';
 
@@ -25,6 +26,7 @@ const LOGICAL_HEIGHT = 1080;
 const MAX_IMAGE_DIMENSION = 0.7;
 
 export function CanvasArea() {
+  const { t } = useTranslation();
   const {
     canvasElRef,
     containerRef,
@@ -103,7 +105,7 @@ export function CanvasArea() {
         const imageElement: ImageElement = {
           id,
           type: 'image',
-          name: 'Image',
+          name: t('imageDefault'),
           x: (LOGICAL_WIDTH - displayW) / 2,
           y: (LOGICAL_HEIGHT - displayH) / 2,
           width: naturalW,
@@ -135,10 +137,10 @@ export function CanvasArea() {
         useEditorStore.getState().addElement(imageElement);
         canvas.setActiveObject(fabricImage);
       } catch {
-        setUploadError('Erro ao carregar imagem.');
+        setUploadError(t('uploadError'));
       }
     },
-    [canvasInstanceRef, setUploadError],
+    [canvasInstanceRef, setUploadError, t],
   );
 
   useEffect(() => {
@@ -178,7 +180,7 @@ export function CanvasArea() {
       visible: true,
       locked: false,
       zIndex: nextZIndex,
-      text: 'Double-click to edit',
+      text: t('textDefault'),
       fontFamily: 'Arial',
       fontSize: 40,
       fontWeight: 'normal',
@@ -189,7 +191,7 @@ export function CanvasArea() {
       lineHeight: 1.2,
     };
 
-    const fabricText = new FabricText(textElement.text, {
+    const fabricText = new IText(textElement.text, {
       left: textElement.x,
       top: textElement.y,
       fontFamily: textElement.fontFamily,
@@ -213,7 +215,7 @@ export function CanvasArea() {
     canvas.requestRenderAll();
 
     store.addElement(textElement);
-  }, [canvasInstanceRef]);
+  }, [canvasInstanceRef, t]);
 
   const insertShape = useCallback(
     (shapeType: ShapeElement['shapeType']) => {
@@ -562,14 +564,14 @@ export function CanvasArea() {
 
     return [
       {
-        label: 'Copy',
+        label: t('editor.contextMenu.copy'),
         shortcut: 'Ctrl+C',
         icon: ICON_MAP.copy,
         disabled: !hasSelection,
         onClick: () => useEditorStore.getState().copyToClipboard(),
       },
       {
-        label: 'Paste',
+        label: t('editor.contextMenu.paste'),
         shortcut: 'Ctrl+V',
         icon: ICON_MAP.paste,
         disabled: !hasClipboard,
@@ -577,14 +579,14 @@ export function CanvasArea() {
       },
       { label: '', onClick: () => {}, separator: true },
       {
-        label: 'Duplicate',
+        label: t('editor.contextMenu.duplicate'),
         shortcut: 'Ctrl+D',
         icon: ICON_MAP.duplicate,
         disabled: !hasSelection,
         onClick: () => handleDuplicate(),
       },
       {
-        label: 'Delete',
+        label: t('editor.contextMenu.delete'),
         shortcut: 'Del',
         icon: ICON_MAP.delete,
         disabled: !hasSelection,
@@ -592,21 +594,21 @@ export function CanvasArea() {
       },
       { label: '', onClick: () => {}, separator: true },
       {
-        label: 'Group',
+        label: t('editor.contextMenu.group'),
         shortcut: 'Ctrl+G',
         icon: ICON_MAP.group,
         disabled: !hasMultiple,
         onClick: () => handleGroup(),
       },
       {
-        label: 'Ungroup',
+        label: t('editor.contextMenu.ungroup'),
         shortcut: 'Ctrl+Shift+G',
         icon: ICON_MAP.ungroup,
         disabled: !isGroup,
         onClick: () => handleUngroup(),
       },
     ];
-  }, [selectedElementIds, clipboardItems, handlePaste, handleDuplicate, handleDelete, handleGroup, handleUngroup]);
+  }, [selectedElementIds, clipboardItems, handlePaste, handleDuplicate, handleDelete, handleGroup, handleUngroup, t]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -685,7 +687,7 @@ export function CanvasArea() {
             <div className='flex flex-col items-center gap-2'>
               <div className='h-5 w-5 animate-spin rounded-full border-2 border-muted-foreground/30 border-t-muted-foreground' />
               <span className='text-[11px] text-muted-foreground'>
-                Loading canvas...
+                {t('editor.canvas.loading')}
               </span>
             </div>
           </div>
@@ -695,10 +697,10 @@ export function CanvasArea() {
           <div className='absolute inset-0 flex items-center justify-center pointer-events-none z-0'>
             <div className='flex flex-col items-center gap-1 text-center'>
               <span className='text-[13px] text-muted-foreground/60 font-medium'>
-                Empty canvas
+                {t('editor.canvas.empty')}
               </span>
               <span className='text-[11px] text-muted-foreground/40'>
-                Add images, text or shapes to get started
+                {t('editor.canvas.emptyHint')}
               </span>
             </div>
           </div>

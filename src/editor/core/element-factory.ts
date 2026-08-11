@@ -9,6 +9,7 @@ import type {
 } from '@/types';
 import {
   FabricText,
+  IText,
   FabricImage,
   Rect,
   Circle,
@@ -88,7 +89,7 @@ export function normalizeFabricObject(fabricObject: FabricObject): void {
 
 export function createFabricObject(
   element: TextElement,
-): FabricText;
+): IText;
 export function createFabricObject(
   element: ImageElement,
 ): Promise<FabricImage>;
@@ -116,8 +117,8 @@ export function createFabricObject(
   }
 }
 
-function createTextObject(element: TextElement): FabricText {
-  const text = new FabricText(element.text, {
+function createTextObject(element: TextElement): IText {
+  const text = new IText(element.text, {
     fontFamily: element.fontFamily,
     fontSize: element.fontSize,
     fontWeight: element.fontWeight as string | number,

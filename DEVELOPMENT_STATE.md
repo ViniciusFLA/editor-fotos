@@ -33,10 +33,133 @@
 **ETAPA 29 — Export** — CONCLUIDA
 **ETAPA 30 — UI/UX Polish** — CONCLUIDA
 
-**Proxima etapa:** ETAPA 31 — AI Provider Architecture (FASE D)
-**Última atualização:** 2026-08-10
+**Próxima etapa:** ETAPA 31 — AI Provider Architecture (FASE D)
+**Última atualização:** 2026-08-11
 
-**Deploy mais recente:** Preview CHECKPOINT FASE B (ETAPA 14) — 2026-08-10
+**Deploy mais recente:** Preview CHECKPOINT QA MVP CORRIGIDO (48/48 bugs) — 2026-08-11
+**Preview URL:** https://editor-fotos-3ct3afv7h-viniciusflas-projects.vercel.app
+**Commit:** 408ad67 — fix: complete MVP QA corrections — 48/48 bugs resolved across 7 blocks
+
+### QA MVP — Status
+
+**Bugs encontrados:** 48
+**Bugs resolvidos:** 48
+**Bugs abertos:** 0
+
+**Blocos concluídos:**
+- BLOCO 1 — Persistência / Integridade de Dados (10/10)
+- BLOCO 2 — History / Undo / Redo (6/6)
+- BLOCO 3 — Groups / Pages / Clipboard (5/5)
+- BLOCO 4 — Canvas Lifecycle / Background (6/6)
+- BLOCO 5 — Element Factory / Shapes / Image Rebuild (6/6)
+- BLOCO 6 — Crop / Guides / Performance (4/4)
+- BLOCO 7 — Robustez / Polish Final (11/11)
+
+**Arquivos alterados:** 14 arquivos modificados, 1 novo (QA_REPORT_MVP.md)
+
+---
+
+## FASE EXTRAORDINÁRIA — MVP Usability + I18N
+
+### Status: CONCLUIDA
+
+**Data:** 2026-08-11
+
+Esta fase NÃO altera a numeração oficial do ROADMAP.
+A próxima etapa oficial continua sendo ETAPA 31.
+
+### Objetivo
+Implementar edição real de texto, exclusão de páginas com confirmação e sistema de internacionalização com 3 idiomas.
+
+### Implementado
+
+#### 1. Edição Real de Texto
+- Substituído `FabricText` por `IText` (Fabric.js v6), que oferece edição interativa completa
+- Duplo clique em texto no canvas entra em modo de edição com cursor, seleção de caracteres e suporte a Backspace/Delete
+- Edição de conteúdo de texto pelo painel de propriedades: campo textarea na seção "Text"
+- Conteúdo padrão i18n-aware ao adicionar novo texto:
+  - pt-BR: "Seu texto"
+  - en: "Your text"
+  - es: "Tu texto"
+- Keyboard shortcuts verificam `isTextEditingRef` para não interferir com edição de texto (Delete, Backspace, Ctrl+C/V/A/X, Arrow keys)
+- Canvas escuta eventos `text:editing:entered` / `text:editing:exited` para tracking do estado de edição
+- Undo/Redo captura estado via `pushHistoryDebounced` antes de alterações de texto
+
+#### 2. Exclusão de Páginas
+- Botão X no hover de cada aba de página (não ativa) abre confirmação
+- Diálogo de confirmação: "Excluir esta página?" / "Delete this page?" / "¿Eliminar esta página?"
+- Não permite excluir a última página (guard no store `deletePage`)
+- Ao excluir página ativa, seleciona automaticamente a primeira página restante
+- Canvas é reconstruído após exclusão
+- Elementos, dados e background da página são removidos
+
+#### 3. Internacionalização (i18n)
+- Arquitetura centralizada em `src/i18n/`
+- Contexto React com provider, hook `useTranslation()` e persistência em localStorage
+- 3 idiomas: pt-BR (padrão), en, es
+- Tradução de toda a UI visível: toolbar, sidebar, properties panel, layers, pages, canvas, context menu, save states, zoom, export, background, crop, filters, font system
+- Seletor de idioma discreto na toolbar com ícone de globo
+- Troca instantânea de idioma sem reload
+- Chaves de tradução semânticas (`editor.toolbar.undo`, `editor.properties.text.content`, etc.)
+- Nomes de página padrão i18n-aware para novas páginas
+- Conteúdo do usuário (textos no canvas) não é afetado pela troca de idioma
+- `aria-label` e `title` attributes traduzidos
+
+### Validacoes executadas
+
+| Comando             | Resultado |
+|----------------------|-----------|
+| `npx tsc --noEmit`   | OK        |
+| `npx eslint .`       | OK        |
+| `npx next build`     | OK        |
+
+### Arquivos criados
+
+| Arquivo | Descricao |
+|---------|-----------|
+| `src/i18n/index.ts` | Barrel export do modulo i18n |
+| `src/i18n/i18n-context.tsx` | React context, provider e hook useTranslation com persistencia localStorage |
+| `src/i18n/locales/types.ts` | Tipos Translation e Locale |
+| `src/i18n/locales/pt-BR.ts` | Traducoes em Portugues do Brasil |
+| `src/i18n/locales/en.ts` | Traducoes em English |
+| `src/i18n/locales/es.ts` | Traducoes em Espanol |
+| `src/components/app-providers.tsx` | Client wrapper para I18nProvider no layout |
+
+### Arquivos alterados
+
+| Arquivo | Alteracoes |
+|---------|-----------|
+| `src/app/layout.tsx` | Adicionado AppProviders wrapper |
+| `src/editor/core/element-factory.ts` | FabricText → IText em createFabricObject e createTextObject |
+| `src/hooks/use-canvas.ts` | Eventos text:editing:entered/exited mantidos para IText |
+| `src/stores/editor-store.ts` | createPage aceita parametro opcional name |
+| `src/components/editor/canvas-area.tsx` | IText em insertText, default text i18n, loading/empty states i18n, context menu i18n |
+| `src/components/editor/right-panel.tsx` | i18n em todas as secoes + textarea de conteudo na secao Text |
+| `src/components/editor/top-toolbar.tsx` | i18n + seletor de idioma + tooltips traduzidos |
+| `src/components/editor/left-sidebar.tsx` | i18n nas tabs e opcoes de shapes, removido triggerShapeAdd desnecessario |
+| `src/components/editor/footer-status.tsx` | i18n + confirmacao ao excluir pagina + nomes de pagina i18n |
+| `src/components/editor/layers-panel.tsx` | i18n em titulos, botoes, tooltips |
+
+### Observacoes
+
+- `IText` do Fabric.js v6 estende `FabricText` e oferece edicao interativa completa (cursor, selecao, copy/paste nativos)
+- O historico undo/redo para conteudo de texto usa `pushHistoryDebounced` (500ms) — edicoes rapidas sao agrupadas em um unico snapshot
+- Exclusao de pagina NAO participa do historico Undo global (a arquitetura per-page do history-manager nao suporta operacoes estruturais de pagina)
+- O nome padrao de novas paginas respeita o idioma atual, mas garantir unicidade via numeracao (Page 1, Page 2, ...)
+- Páginas existentes mantem seus nomes originais ao trocar idioma
+
+### ETAPA 31 continua NÃO INICIADA
+
+---
+- BLOCO 1 — Persistência / Integridade de Dados (10/10)
+- BLOCO 2 — History / Undo / Redo (6/6)
+- BLOCO 3 — Groups / Pages / Clipboard (5/5)
+- BLOCO 4 — Canvas Lifecycle / Background (6/6)
+- BLOCO 5 — Element Factory / Shapes / Image Rebuild (6/6)
+- BLOCO 6 — Crop / Guides / Performance (4/4)
+- BLOCO 7 — Robustez / Polish Final (11/11)
+
+**Arquivos alterados:** 14 arquivos modificados, 1 novo (QA_REPORT_MVP.md)
 
 ---
 

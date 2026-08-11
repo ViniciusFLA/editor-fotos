@@ -97,7 +97,7 @@ interface EditorStore {
   setPageBackground: (bg: PageBackground) => void;
 
   setActivePage: (id: string) => void;
-  createPage: (width?: number, height?: number) => void;
+  createPage: (width?: number, height?: number, name?: string) => void;
   deletePage: (id: string) => void;
   duplicatePage: (id: string) => void;
   renamePage: (id: string, name: string) => void;
@@ -423,7 +423,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       };
     }),
 
-  createPage: (width, height) =>
+  createPage: (width, height, name) =>
     set((state) => {
       const updatedPages = state.pages.map((p) => {
         if (p.id === state.activePageId) {
@@ -439,9 +439,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
         })
         .filter((n) => n > 0);
       const nextNum = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
+      const pageName = name || `Page ${nextNum}`;
       const newPage: PageData = {
         id: generateId(),
-        name: `Page ${nextNum}`,
+        name: pageName,
         width: width ?? 1080,
         height: height ?? 1080,
         background: {
