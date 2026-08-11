@@ -36,9 +36,9 @@
 **Próxima etapa:** ETAPA 31 — AI Provider Architecture (FASE D)
 **Última atualização:** 2026-08-11
 
-**Deploy mais recente:** Preview CHECKPOINT QA MVP CORRIGIDO (48/48 bugs) — 2026-08-11
-**Preview URL:** https://editor-fotos-3ct3afv7h-viniciusflas-projects.vercel.app
-**Commit:** 408ad67 — fix: complete MVP QA corrections — 48/48 bugs resolved across 7 blocks
+**Deploy mais recente:** Preview FASE EXTRAORDINARIA Usability + I18N — 2026-08-11
+**Preview URL:** https://editor-fotos-28egr4go0-viniciusflas-projects.vercel.app
+**Commit:** c43bf80 — feat: add text editing, page deletion, and i18n (pt-BR, en, es)
 
 ### QA MVP — Status
 

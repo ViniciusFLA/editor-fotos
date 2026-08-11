@@ -35,6 +35,7 @@ export function CanvasArea() {
     isTextEditingRef,
     scale,
     canvasReady,
+    resetTextEditing,
   } = useCanvas({ logicalWidth: LOGICAL_WIDTH, logicalHeight: LOGICAL_HEIGHT });
 
   const [isDragging, setIsDragging] = useState(false);
@@ -168,7 +169,7 @@ export function CanvasArea() {
     const textElement: TextElement = {
       id,
       type: 'text',
-      name: 'Text',
+      name: t('textLayerDefault'),
       x: LOGICAL_WIDTH / 2,
       y: LOGICAL_HEIGHT / 2,
       width: 200,
@@ -361,35 +362,34 @@ export function CanvasArea() {
     const canvas = canvasInstanceRef.current;
     if (!canvas || !canvasReady) return;
 
+    resetTextEditing();
+
     canvas.clear();
 
     const store = useEditorStore.getState();
 
-    store.elements.forEach((el) => {
+    const rebuildOps = store.elements.map(async (el) => {
       const fabricObj = createFabricObject(el);
-
-      if (fabricObj instanceof Promise) {
-        fabricObj.then((resolved) => {
-          setElementId(resolved, el.id);
-          canvas.add(resolved);
-          canvas.requestRenderAll();
-
-          restoreSelectionAfterRebuild(canvas);
-        }).catch(() => {
-          // element failed to rebuild — skip it, continue with others
-        });
-      } else {
-        setElementId(fabricObj, el.id);
-        canvas.add(fabricObj);
-      }
+      const resolved = fabricObj instanceof Promise ? await fabricObj : fabricObj;
+      setElementId(resolved, el.id);
+      canvas.add(resolved);
     });
 
-    canvas.requestRenderAll();
-
-    restoreSelectionAfterRebuild(canvas);
-  }, [rebuildCanvasVersion, canvasReady, canvasInstanceRef, restoreSelectionAfterRebuild]);
+    Promise.allSettled(rebuildOps).then(() => {
+      canvas.requestRenderAll();
+      restoreSelectionAfterRebuild(canvas);
+    });
+  }, [rebuildCanvasVersion, canvasReady, canvasInstanceRef, restoreSelectionAfterRebuild, resetTextEditing]);
 
   const prevElementRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isTextEditingRef.current) return;
+    if (!canvasReady) return;
+    if (selectedElementIds.length === 0) {
+      resetTextEditing();
+    }
+  }, [selectedElementIds, canvasReady, isTextEditingRef, resetTextEditing]);
 
   const selectedElement = useEditorStore((s) => {
     const id = s.selectedElementIds[0];

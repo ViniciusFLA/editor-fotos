@@ -110,6 +110,13 @@ export interface Translations {
       deleteConfirm: string;
       newPage: string;
       custom: string;
+      presets: {
+        instagramSquare: string;
+        instagramPortrait: string;
+        storiesReels: string;
+        facebookLandscape: string;
+        youtubeThumbnail: string;
+      };
     };
     canvas: {
       loading: string;
@@ -153,6 +160,7 @@ export interface Translations {
   textDefault: string;
   pageDefault: string;
   imageDefault: string;
+  textLayerDefault: string;
   groupDefault: string;
   uploadError: string;
 }

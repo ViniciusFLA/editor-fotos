@@ -406,7 +406,7 @@ export function RightPanel() {
                         : 'border-border bg-background text-muted-foreground hover:bg-muted'
                     }`}
                   >
-                    {align.charAt(0).toUpperCase() + align.slice(1)}
+                    {t(`editor.properties.text.${align}`)}
                   </button>
                 ))}
               </div>

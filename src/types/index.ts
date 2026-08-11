@@ -175,6 +175,7 @@ export interface PageBackground {
 export const PageDataSchema = z.object({
   id: z.string(),
   name: z.string(),
+  pageNumber: z.number(),
   width: z.number(),
   height: z.number(),
   background: PageBackgroundSchema,
@@ -184,6 +185,7 @@ export const PageDataSchema = z.object({
 export interface PageData {
   id: string;
   name: string;
+  pageNumber: number;
   width: number;
   height: number;
   background: PageBackground;

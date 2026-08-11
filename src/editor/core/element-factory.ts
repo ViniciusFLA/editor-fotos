@@ -8,7 +8,6 @@ import type {
   ElementType,
 } from '@/types';
 import {
-  FabricText,
   IText,
   FabricImage,
   Rect,
@@ -301,21 +300,22 @@ export function extractElementUpdates(
 
   switch (elementType) {
     case 'text': {
-      const fill = (fabricObject as FabricText).fill;
+      const itext = fabricObject as IText;
+      const fill = itext.fill;
       return {
         ...common,
-        text: (fabricObject as FabricText).text,
-        fontFamily: (fabricObject as FabricText).fontFamily,
-        fontSize: (fabricObject as FabricText).fontSize,
-        fontWeight: (fabricObject as FabricText).fontWeight,
-        fontStyle: (fabricObject as FabricText).fontStyle as 'normal' | 'italic',
-        textAlign: (fabricObject as FabricText).textAlign as
+        text: itext.text,
+        fontFamily: itext.fontFamily,
+        fontSize: itext.fontSize,
+        fontWeight: itext.fontWeight,
+        fontStyle: itext.fontStyle as 'normal' | 'italic',
+        textAlign: itext.textAlign as
           | 'left'
           | 'center'
           | 'right',
         fill: typeof fill === 'string' ? fill : '#000000',
-        letterSpacing: (fabricObject as FabricText).charSpacing,
-        lineHeight: (fabricObject as FabricText).lineHeight,
+        letterSpacing: itext.charSpacing,
+        lineHeight: itext.lineHeight,
       };
     }
     case 'image':

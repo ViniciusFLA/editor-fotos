@@ -6,17 +6,17 @@ import { useEditorStore } from '@/stores/editor-store';
 import { useTranslation } from '@/i18n';
 
 interface FormatPreset {
-  label: string;
+  labelKey: string;
   width: number;
   height: number;
 }
 
 const FORMAT_PRESETS: FormatPreset[] = [
-  { label: 'Instagram Square', width: 1080, height: 1080 },
-  { label: 'Instagram Portrait', width: 1080, height: 1350 },
-  { label: 'Stories / Reels', width: 1080, height: 1920 },
-  { label: 'Facebook Landscape', width: 1200, height: 628 },
-  { label: 'YouTube Thumbnail', width: 1280, height: 720 },
+  { labelKey: 'editor.pages.presets.instagramSquare', width: 1080, height: 1080 },
+  { labelKey: 'editor.pages.presets.instagramPortrait', width: 1080, height: 1350 },
+  { labelKey: 'editor.pages.presets.storiesReels', width: 1080, height: 1920 },
+  { labelKey: 'editor.pages.presets.facebookLandscape', width: 1200, height: 628 },
+  { labelKey: 'editor.pages.presets.youtubeThumbnail', width: 1280, height: 720 },
 ];
 
 export function FooterStatus() {
@@ -97,22 +97,40 @@ export function FooterStatus() {
     }
   }, [confirmDeleteId, deletePage]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConfirmDeleteId(null);
+      } else if (e.key === 'Enter') {
+        confirmDeletePage();
+      }
+    };
+
+    if (confirmDeleteId) {
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [confirmDeleteId, confirmDeletePage]);
+
   const handleSelectPreset = useCallback(
     (w: number, h: number) => {
-      createPage(w, h, `${t('pageDefault')} ${pages.length + 1}`);
+      createPage(w, h, t('pageDefault'));
       setShowPresets(false);
     },
-    [createPage, t, pages.length],
+    [createPage, t],
   );
 
   const handleCustomCreate = useCallback(() => {
     const w = parseInt(customWidth);
     const h = parseInt(customHeight);
     if (w > 0 && h > 0) {
-      createPage(w, h, `${t('pageDefault')} ${pages.length + 1}`);
+      createPage(w, h, t('pageDefault'));
       setShowPresets(false);
     }
-  }, [customWidth, customHeight, createPage, t, pages.length]);
+  }, [customWidth, customHeight, createPage, t]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -212,11 +230,11 @@ export function FooterStatus() {
 
               {FORMAT_PRESETS.map((preset) => (
                 <button
-                  key={preset.label}
+                  key={preset.labelKey}
                   className='flex items-center justify-between w-full px-3 py-1 text-[11px] hover:bg-muted text-muted-foreground hover:text-foreground transition-colors'
                   onClick={() => handleSelectPreset(preset.width, preset.height)}
                 >
-                  <span className='truncate'>{preset.label}</span>
+                  <span className='truncate'>{t(preset.labelKey)}</span>
                   <span className='text-[10px] text-muted-foreground ml-2 shrink-0'>
                     {preset.width} × {preset.height}
                   </span>

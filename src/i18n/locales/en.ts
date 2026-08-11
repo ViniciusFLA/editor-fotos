@@ -112,6 +112,13 @@ const en: Translations = {
       deleteConfirm: 'Delete this page?',
       newPage: 'New Page',
       custom: 'Custom',
+      presets: {
+        instagramSquare: 'Instagram Square',
+        instagramPortrait: 'Instagram Portrait',
+        storiesReels: 'Stories / Reels',
+        facebookLandscape: 'Facebook Landscape',
+        youtubeThumbnail: 'YouTube Thumbnail',
+      },
     },
     canvas: {
       loading: 'Loading canvas...',
@@ -155,6 +162,7 @@ const en: Translations = {
   textDefault: 'Your text',
   pageDefault: 'Page',
   imageDefault: 'Image',
+  textLayerDefault: 'Text',
   groupDefault: 'Group',
   uploadError: 'Error loading image.',
 };

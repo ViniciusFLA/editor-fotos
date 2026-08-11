@@ -545,5 +545,8 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     isTextEditingRef,
     scale: displayScale,
     canvasReady,
+    resetTextEditing: () => {
+      isTextEditingRef.current = false;
+    },
   };
 }

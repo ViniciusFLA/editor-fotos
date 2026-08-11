@@ -56,6 +56,7 @@ interface EditorStore {
   triggeredExport: number;
   exportFormat: 'png' | 'jpeg' | 'webp';
   exportScale: number;
+  nextPageNumber: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -97,7 +98,7 @@ interface EditorStore {
   setPageBackground: (bg: PageBackground) => void;
 
   setActivePage: (id: string) => void;
-  createPage: (width?: number, height?: number, name?: string) => void;
+  createPage: (width?: number, height?: number, namePrefix?: string) => void;
   deletePage: (id: string) => void;
   duplicatePage: (id: string) => void;
   renamePage: (id: string, name: string) => void;
@@ -193,6 +194,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
     {
       id: 'page-1',
       name: 'Page 1',
+      pageNumber: 1,
       width: 1080,
       height: 1080,
       background: {
@@ -217,6 +219,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   triggeredExport: 0,
   exportFormat: 'png' as const,
   exportScale: 1,
+  nextPageNumber: 2,
 
   setElements: (elements) =>
     set((state) => ({
@@ -423,7 +426,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       };
     }),
 
-  createPage: (width, height, name) =>
+  createPage: (width, height, namePrefix) =>
     set((state) => {
       const updatedPages = state.pages.map((p) => {
         if (p.id === state.activePageId) {
@@ -432,17 +435,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
         return p;
       });
 
-      const usedNumbers = state.pages
-        .map((p) => {
-          const match = p.name.match(/^Page (\d+)$/);
-          return match ? parseInt(match[1], 10) : 0;
-        })
-        .filter((n) => n > 0);
-      const nextNum = usedNumbers.length > 0 ? Math.max(...usedNumbers) + 1 : 1;
-      const pageName = name || `Page ${nextNum}`;
+      const pageNum = state.nextPageNumber;
+      const pageName = `${namePrefix || 'Page'} ${pageNum}`;
       const newPage: PageData = {
         id: generateId(),
         name: pageName,
+        pageNumber: pageNum,
         width: width ?? 1080,
         height: height ?? 1080,
         background: {
@@ -466,6 +464,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         pageBackground: newPage.background,
         selectedElementIds: [],
         rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
+        nextPageNumber: state.nextPageNumber + 1,
       };
     }),
 
@@ -506,6 +505,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         ...source,
         id: generateId(),
         name: `${source.name} copy`,
+        pageNumber: state.nextPageNumber,
         elements: source.elements.map((el) => deepCloneElementWithNewIds(el)),
       };
 
@@ -520,6 +520,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         pageBackground: newPage.background,
         selectedElementIds: [],
         rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
+        nextPageNumber: state.nextPageNumber + 1,
       };
     }),
 
@@ -586,6 +587,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const loadedActiveId = data.activePageId || loadedPages[0]?.id || 'page-1';
       const firstPage = loadedPages.find((p: PageData) => p.id === loadedActiveId) || loadedPages[0];
 
+      const maxPageNum = loadedPages.reduce((max, p) => Math.max(max, p.pageNumber ?? 0), 0);
+
       return {
         projectId: id,
         projectName: record.name,
@@ -597,6 +600,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         selectedElementIds: [],
         saveStatus: 'saved' as const,
         rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
+        nextPageNumber: maxPageNum + 1,
       };
     });
   },
@@ -611,6 +615,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
       const defaultPage: PageData = {
         id: generateId(),
         name: 'Page 1',
+        pageNumber: 1,
         width: 1080,
         height: 1080,
         background: {
@@ -638,6 +643,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         selectedElementIds: [],
         saveStatus: 'saved' as const,
         rebuildCanvasVersion: state.rebuildCanvasVersion + 1,
+        nextPageNumber: 2,
       };
     });
   },

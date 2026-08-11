@@ -112,6 +112,13 @@ const ptBR: Translations = {
       deleteConfirm: 'Excluir esta página?',
       newPage: 'Nova Página',
       custom: 'Personalizado',
+      presets: {
+        instagramSquare: 'Quadrado do Instagram',
+        instagramPortrait: 'Retrato do Instagram',
+        storiesReels: 'Stories / Reels',
+        facebookLandscape: 'Paisagem do Facebook',
+        youtubeThumbnail: 'Miniatura do YouTube',
+      },
     },
     canvas: {
       loading: 'Carregando canvas...',
@@ -155,6 +162,7 @@ const ptBR: Translations = {
   textDefault: 'Seu texto',
   pageDefault: 'Página',
   imageDefault: 'Imagem',
+  textLayerDefault: 'Texto',
   groupDefault: 'Grupo',
   uploadError: 'Erro ao carregar imagem.',
 };

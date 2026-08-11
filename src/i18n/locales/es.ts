@@ -112,6 +112,13 @@ const es: Translations = {
       deleteConfirm: '¿Eliminar esta página?',
       newPage: 'Nueva Página',
       custom: 'Personalizado',
+      presets: {
+        instagramSquare: 'Cuadrado de Instagram',
+        instagramPortrait: 'Retrato de Instagram',
+        storiesReels: 'Stories / Reels',
+        facebookLandscape: 'Horizontal de Facebook',
+        youtubeThumbnail: 'Miniatura de YouTube',
+      },
     },
     canvas: {
       loading: 'Cargando canvas...',
@@ -155,6 +162,7 @@ const es: Translations = {
   textDefault: 'Tu texto',
   pageDefault: 'Página',
   imageDefault: 'Imagen',
+  textLayerDefault: 'Texto',
   groupDefault: 'Grupo',
   uploadError: 'Error al cargar imagen.',
 };
