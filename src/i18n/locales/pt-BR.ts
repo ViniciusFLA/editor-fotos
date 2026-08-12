@@ -167,6 +167,7 @@ const ptBR: Translations = {
         requiresSingleImage: 'Selecione uma imagem.',
         imageFetchFailed: 'Não foi possível carregar a imagem.',
         httpError: 'Falha ao detectar texto. Tente novamente.',
+        serviceUnavailable: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
         pageRemoved: 'A página foi removida.',
         imageRemoved: 'A imagem foi removida.',
         unknown: 'Erro desconhecido.',

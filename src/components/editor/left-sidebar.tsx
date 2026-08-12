@@ -209,6 +209,7 @@ export function LeftSidebar() {
                 ocrError === 'requiresSingleImage' ||
                   ocrError === 'imageFetchFailed' ||
                   ocrError === 'httpError' ||
+                  ocrError === 'serviceUnavailable' ||
                   ocrError === 'pageRemoved' ||
                   ocrError === 'imageRemoved'
                   ? `editor.ai.error.${ocrError}`

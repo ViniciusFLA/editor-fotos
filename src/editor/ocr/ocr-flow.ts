@@ -15,6 +15,7 @@ export type OcrFlowErrorCode =
   | 'requiresSingleImage'
   | 'imageFetchFailed'
   | 'httpError'
+  | 'serviceUnavailable'
   | 'pageRemoved'
   | 'imageRemoved';
 
@@ -32,6 +33,14 @@ export interface OcrFlowResult {
   elements: TextElement[];
   sourceImageId: string;
   sourcePageId: string;
+}
+
+const RETRYABLE_STATUSES = new Set([429, 502, 504]);
+const MAX_ATTEMPTS = 3;
+const RETRY_DELAY_MS = 8000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchImageBlob(src: string): Promise<Blob> {
@@ -58,6 +67,55 @@ function extractErrorMessage(data: unknown): string {
   return 'OCR failed';
 }
 
+async function postOcr(formData: FormData): Promise<OCRResult> {
+  let lastStatus = 0;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let response: Response;
+    try {
+      response = await fetch('/api/ai/ocr', { method: 'POST', body: formData });
+    } catch {
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      throw new OcrFlowError('httpError', 'Network error');
+    }
+
+    if (response.ok) {
+      console.info('[OCR UI] request completed: status=200');
+      return (await response.json()) as OCRResult;
+    }
+
+    lastStatus = response.status;
+
+    if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+      console.info(`[OCR UI] transient ${response.status}, retrying (${attempt}/${MAX_ATTEMPTS - 1})...`);
+      await sleep(RETRY_DELAY_MS);
+      continue;
+    }
+
+    let message = 'OCR failed';
+    try {
+      message = extractErrorMessage(await response.json());
+    } catch {
+      // keep default message
+    }
+
+    if (RETRYABLE_STATUSES.has(response.status)) {
+      throw new OcrFlowError('serviceUnavailable', message);
+    }
+
+    throw new OcrFlowError('httpError', message);
+  }
+
+  if (RETRYABLE_STATUSES.has(lastStatus)) {
+    throw new OcrFlowError('serviceUnavailable', 'OCR service unavailable');
+  }
+
+  throw new OcrFlowError('httpError', 'OCR failed');
+}
+
 export async function runOcrDetectText(): Promise<OcrFlowResult> {
   const store = useEditorStore.getState();
 
@@ -74,28 +132,14 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
   const sourceImageId = image.id;
 
   const blob = await fetchImageBlob(image.src);
+  console.info(`[OCR UI] file prepared: type=${blob.type || 'unknown'}, size=${blob.size}`);
 
   const formData = new FormData();
   formData.append('file', blob, 'image.png');
 
-  let response: Response;
-  try {
-    response = await fetch('/api/ai/ocr', { method: 'POST', body: formData });
-  } catch {
-    throw new OcrFlowError('httpError', 'Network error');
-  }
+  const result = await postOcr(formData);
 
-  if (!response.ok) {
-    let message = 'OCR failed';
-    try {
-      message = extractErrorMessage(await response.json());
-    } catch {
-      // keep default message
-    }
-    throw new OcrFlowError('httpError', message);
-  }
-
-  const result = (await response.json()) as OCRResult;
+  console.info(`[OCR UI] detected=${result.detectedTexts?.length ?? 0}`);
 
   // Page safety: the source page must still exist.
   const current = useEditorStore.getState();
@@ -118,6 +162,8 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
     sourcePageId,
     baseZIndex: Math.max(0, ...sourcePage.elements.map((el) => el.zIndex)) + 1,
   });
+
+  console.info(`[OCR UI] created=${elements.length}`);
 
   return { elements, sourceImageId, sourcePageId };
 }

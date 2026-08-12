@@ -167,6 +167,7 @@ const es: Translations = {
         requiresSingleImage: 'Selecciona una imagen.',
         imageFetchFailed: 'No se pudo cargar la imagen.',
         httpError: 'Error al detectar texto. Inténtalo de nuevo.',
+        serviceUnavailable: 'Servicio no disponible temporalmente. Inténtalo en unos instantes.',
         pageRemoved: 'La página fue eliminada.',
         imageRemoved: 'La imagen fue eliminada.',
         unknown: 'Error desconocido.',

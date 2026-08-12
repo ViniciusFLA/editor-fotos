@@ -165,6 +165,7 @@ export interface Translations {
         requiresSingleImage: string;
         imageFetchFailed: string;
         httpError: string;
+        serviceUnavailable: string;
         pageRemoved: string;
         imageRemoved: string;
         unknown: string;

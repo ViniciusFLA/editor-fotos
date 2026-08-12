@@ -167,6 +167,7 @@ const en: Translations = {
         requiresSingleImage: 'Select an image.',
         imageFetchFailed: 'Could not load the image.',
         httpError: 'Failed to detect text. Try again.',
+        serviceUnavailable: 'Service temporarily unavailable. Try again shortly.',
         pageRemoved: 'The page was removed.',
         imageRemoved: 'The image was removed.',
         unknown: 'Unknown error.',
