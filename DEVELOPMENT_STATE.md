@@ -73,6 +73,20 @@
 
 **Manual UI validation:** pendente (checklist A–P registrado no relatório do checkpoint)
 
+### CHECKPOINT 33.2 — OCR UI Production Fix
+
+**Status:** FIXED — AWAITING USER MANUAL RETEST
+
+**Bug:** "Detectar texto" falhava em produção com "Falha ao detectar texto. Tente novamente."
+
+**Root cause:** Render Free OOM — após a 1ª chamada OCR o container sofre OOM (pool de memória do Paddle retém memória; o `try_shrink_memory` do 32.5 não alcança o predictor real). Chamadas seguintes retornam 502 até o Render reiniciar. Fluxo da UI (asset → blob → FormData → POST) está correto.
+
+**Fix:** retry no client (`ocr-flow.ts`) para 502/504/429 transitórios (3 tentativas, 8s de intervalo) + mensagem "serviço temporariamente indisponível".
+
+**Commit:** 071a24d
+
+**Backend:** GET/POST OCR continuam PASS em produção.
+
 ### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 
 **Status:** CONCLUIDO
