@@ -14,6 +14,17 @@ logger = logging.getLogger("paddle-ocr")
 MAX_DIMENSION = 512
 
 
+def _rss_mb() -> float:
+    try:
+        with open("/proc/self/status", "r") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        pass
+    return -1.0
+
+
 class OCREngine:
     def __init__(self):
         self._lock = threading.Lock()
@@ -76,7 +87,9 @@ class OCREngine:
 
         texts = []
         with self._lock:
+            logger.info(f"[OCR] pre-predict RSS={_rss_mb()}MB (img {w}x{h} -> {img_bgr.shape[1]}x{img_bgr.shape[0]})")
             results = list(self.ocr.predict(img_bgr))
+            logger.info(f"[OCR] post-predict RSS={_rss_mb()}MB, results={len(results)}")
 
             for res in results:
                 rec_texts = res.get("rec_texts")

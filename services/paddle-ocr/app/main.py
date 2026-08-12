@@ -59,6 +59,17 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
+def current_memory_mb() -> float:
+    try:
+        with open("/proc/self/status", "r") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return round(int(line.split()[1]) / 1024, 1)
+    except Exception:
+        pass
+    return -1.0
+
+
 @app.get("/health")
 async def health():
     return {
@@ -67,6 +78,7 @@ async def health():
         "model": "PP-OCRv5",
         "model_ready": model_ready,
         "startup_seconds": round(startup_time, 1) if startup_time else None,
+        "memory_mb": current_memory_mb(),
         "languages": ["pt", "en", "es"],
     }
 
