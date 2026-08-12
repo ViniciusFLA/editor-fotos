@@ -156,6 +156,20 @@ export interface Translations {
       en: string;
       es: string;
     };
+    ai: {
+      detectText: string;
+      detecting: string;
+      detected: string;
+      selectImageHint: string;
+      error: {
+        requiresSingleImage: string;
+        imageFetchFailed: string;
+        httpError: string;
+        pageRemoved: string;
+        imageRemoved: string;
+        unknown: string;
+      };
+    };
   };
   textDefault: string;
   pageDefault: string;

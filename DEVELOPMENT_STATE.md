@@ -34,9 +34,28 @@
 **ETAPA 30 — UI/UX Polish** — CONCLUIDA
 
 **ETAPA 32 — OCR Provider** — CONCLUIDA
+**ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
+**Próxima etapa:** ETAPA 34 — Text Masks
 **Última atualização:** 2026-08-12
+
+### ETAPA 33 — OCR → Editable Text Layers
+
+**Status:** CONCLUIDA
+
+**Fluxo:** ImageElement → blob → POST /api/ai/ocr → OCRResult → convertDetectedTextsToTextElements → TextElement[] → store (batch) + Fabric IText
+
+**Application layer:** `src/editor/ocr/ocr-to-elements.ts` (conversão pura + mapping de coordenadas) e `src/editor/ocr/ocr-flow.ts` (HTTP + safety)
+
+**Coordenadas:** natural-image → canvas com scale, offset, rotation, flip e crop offset. Font size derivado da altura do bounding box (aproximado).
+
+**Batch History:** uma ação lógica — Undo remove todos os textos, Redo restaura todos.
+
+**Page/Image safety:** registra sourcePageId/sourceImageId; aborta se imagem/página removida.
+
+**UI:** botão "Detectar texto" na aba IA (i18n pt-BR/en/es), disabled sem 1 imagem selecionada, loading/erro/sucesso.
+
+**naturalWidth/naturalHeight:** adicionados ao ImageElement (persistidos) para mapeamento correto.
 
 ### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 

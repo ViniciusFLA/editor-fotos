@@ -53,6 +53,8 @@ export const ImageElementSchema = BaseElementSchema.extend({
   flipX: z.boolean(),
   flipY: z.boolean(),
   filters: ImageFiltersSchema,
+  naturalWidth: z.number().optional(),
+  naturalHeight: z.number().optional(),
 });
 
 export const ShapeTypeSchema = z.enum(['rectangle', 'circle', 'line']);
@@ -120,6 +122,8 @@ export interface ImageElement extends EditorElement {
   flipX: boolean;
   flipY: boolean;
   filters: ImageFilters;
+  naturalWidth?: number;
+  naturalHeight?: number;
 }
 
 export interface ImageFilters {

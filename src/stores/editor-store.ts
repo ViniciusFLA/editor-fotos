@@ -57,9 +57,15 @@ interface EditorStore {
   exportFormat: 'png' | 'jpeg' | 'webp';
   exportScale: number;
   nextPageNumber: number;
+  ocrStatus: 'idle' | 'loading' | 'success' | 'error';
+  ocrDetectedCount: number;
+  ocrError: string | null;
+  triggeredOcr: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
+  addElements: (elements: AnyElement[]) => void;
+  addElementsToPage: (pageId: string, elements: AnyElement[]) => void;
   removeElement: (id: string) => void;
   updateElement: (id: string, updates: Partial<AnyElement>) => void;
   setSelectedElementIds: (ids: string[]) => void;
@@ -110,6 +116,12 @@ interface EditorStore {
   markUnsaved: () => void;
 
   triggerExport: (format: 'png' | 'jpeg' | 'webp', scale: number) => void;
+
+  triggerOcrDetect: () => void;
+  setOcrLoading: () => void;
+  setOcrSuccess: (count: number) => void;
+  setOcrError: (message: string) => void;
+  setOcrIdle: () => void;
 }
 
 function reorderZIndices(elements: AnyElement[], orderedIds: string[]): AnyElement[] {
@@ -220,6 +232,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
   exportFormat: 'png' as const,
   exportScale: 1,
   nextPageNumber: 2,
+  ocrStatus: 'idle' as const,
+  ocrDetectedCount: 0,
+  ocrError: null,
+  triggeredOcr: 0,
 
   setElements: (elements) =>
     set((state) => ({
@@ -231,6 +247,26 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   addElement: (element) =>
     set((state) => withPageSync(state, [...state.elements, element])),
+
+  addElements: (elements) =>
+    set((state) =>
+      withPageSync(state, [...state.elements, ...elements]),
+    ),
+
+  addElementsToPage: (pageId, elements) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+      return {
+        elements: isActive
+          ? [...state.elements, ...elements]
+          : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId
+            ? { ...p, elements: [...p.elements, ...elements] }
+            : p,
+        ),
+      };
+    }),
 
   removeElement: (id) =>
     set((state) => {
@@ -656,4 +692,27 @@ export const useEditorStore = create<EditorStore>((set) => ({
       exportFormat: format,
       exportScale: scale,
     })),
+
+  triggerOcrDetect: () =>
+    set((state) => {
+      if (state.ocrStatus === 'loading') return state;
+      return {
+        ocrStatus: 'loading' as const,
+        ocrError: null,
+        ocrDetectedCount: 0,
+        triggeredOcr: state.triggeredOcr + 1,
+      };
+    }),
+
+  setOcrLoading: () =>
+    set({ ocrStatus: 'loading', ocrError: null, ocrDetectedCount: 0 }),
+
+  setOcrSuccess: (count) =>
+    set({ ocrStatus: 'success', ocrDetectedCount: count, ocrError: null }),
+
+  setOcrError: (message) =>
+    set({ ocrStatus: 'error', ocrDetectedCount: 0, ocrError: message }),
+
+  setOcrIdle: () =>
+    set({ ocrStatus: 'idle', ocrError: null, ocrDetectedCount: 0 }),
 }));

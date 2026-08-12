@@ -17,7 +17,6 @@ import { useEditorStore } from '@/stores/editor-store';
 import { validateImageFile } from '@/lib/image-validation';
 import { useTranslation } from '@/i18n';
 import type { ShapeType } from '@/types';
-
 const tabs = [
   { id: 'uploads', icon: Upload, labelKey: 'editor.sidebar.uploads' as const },
   { id: 'text', icon: Type, labelKey: 'editor.sidebar.text' as const },
@@ -43,6 +42,18 @@ export function LeftSidebar() {
   const triggerShapeAdd = useEditorStore((s) => s.triggerShapeAdd);
   const activeSidebarTab = useEditorStore((s) => s.activeSidebarTab);
   const setActiveSidebarTab = useEditorStore((s) => s.setActiveSidebarTab);
+  const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
+  const elements = useEditorStore((s) => s.elements);
+  const ocrStatus = useEditorStore((s) => s.ocrStatus);
+  const ocrDetectedCount = useEditorStore((s) => s.ocrDetectedCount);
+  const ocrError = useEditorStore((s) => s.ocrError);
+  const triggerOcrDetect = useEditorStore((s) => s.triggerOcrDetect);
+
+  const hasSingleImageSelected =
+    selectedElementIds.length === 1 &&
+    elements.some(
+      (el) => el.id === selectedElementIds[0] && el.type === 'image',
+    );
 
   const handleTabClick = useCallback(
     (tabId: string) => {
@@ -64,6 +75,10 @@ export function LeftSidebar() {
       }
       if (tabId === 'layers') {
         setActiveSidebarTab(activeSidebarTab === 'layers' ? null : 'layers');
+        return;
+      }
+      if (tabId === 'ai') {
+        setActiveSidebarTab(activeSidebarTab === 'ai' ? null : 'ai');
         return;
       }
       setActiveSidebarTab(null);
@@ -161,6 +176,46 @@ export function LeftSidebar() {
               <span>{t(opt.labelKey)}</span>
             </button>
           ))}
+        </div>
+      )}
+
+      {activeSidebarTab === 'ai' && (
+        <div className='absolute left-full top-[120px] ml-1 w-56 bg-card border rounded shadow-lg z-50 p-2'>
+          <button
+            onClick={() => triggerOcrDetect()}
+            disabled={!hasSingleImageSelected || ocrStatus === 'loading'}
+            className='flex w-full items-center justify-center gap-2 rounded px-3 py-2 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+          >
+            {ocrStatus === 'loading'
+              ? t('editor.ai.detecting')
+              : t('editor.ai.detectText')}
+          </button>
+
+          {!hasSingleImageSelected && ocrStatus !== 'loading' && (
+            <p className='mt-2 text-[10px] leading-tight text-muted-foreground'>
+              {t('editor.ai.selectImageHint')}
+            </p>
+          )}
+
+          {ocrStatus === 'success' && (
+            <p className='mt-2 text-[10px] leading-tight text-green-600'>
+              {t('editor.ai.detected').replace('{count}', String(ocrDetectedCount))}
+            </p>
+          )}
+
+          {ocrStatus === 'error' && (
+            <p className='mt-2 text-[10px] leading-tight text-destructive'>
+              {t(
+                ocrError === 'requiresSingleImage' ||
+                  ocrError === 'imageFetchFailed' ||
+                  ocrError === 'httpError' ||
+                  ocrError === 'pageRemoved' ||
+                  ocrError === 'imageRemoved'
+                  ? `editor.ai.error.${ocrError}`
+                  : 'editor.ai.error.unknown',
+              )}
+            </p>
+          )}
         </div>
       )}
     </aside>

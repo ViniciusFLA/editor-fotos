@@ -17,6 +17,7 @@ import { validateImageFile } from '@/lib/image-validation';
 import { downloadDataUrl, getExportFileName } from '@/lib/export-utils';
 import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
 import { useTranslation } from '@/i18n';
+import { runOcrDetectText, OcrFlowError } from '@/editor/ocr/ocr-flow';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
 import type { ImageElement, TextElement, ShapeElement } from '@/types';
 
@@ -57,6 +58,7 @@ export function CanvasArea() {
   const exportFormat = useEditorStore((s) => s.exportFormat);
   const exportScale = useEditorStore((s) => s.exportScale);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
+  const triggeredOcr = useEditorStore((s) => s.triggeredOcr);
 
   const insertImage = useCallback(
     async (src: string) => {
@@ -133,6 +135,8 @@ export function CanvasArea() {
             blur: 0,
             grayscale: false,
           },
+          naturalWidth: naturalW,
+          naturalHeight: naturalH,
         };
 
         useEditorStore.getState().addElement(imageElement);
@@ -550,6 +554,46 @@ export function CanvasArea() {
 
     downloadDataUrl(dataUrl, getExportFileName(exportFormat));
   }, [triggeredExport, canvasReady, exportFormat, exportScale, canvasInstanceRef]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredOcr === 0) return;
+
+    const run = async () => {
+      try {
+        const { elements, sourcePageId } = await runOcrDetectText();
+
+        const canvas = canvasInstanceRef.current;
+        const state = useEditorStore.getState();
+
+        const sourcePage = state.pages.find((p) => p.id === sourcePageId);
+        const sourceElements = sourcePage?.elements ?? state.elements;
+        const sourceBackground = sourcePage?.background ?? state.pageBackground;
+
+        pushHistoryImmediate(sourcePageId, sourceElements, sourceBackground);
+
+        if (state.activePageId === sourcePageId && canvas) {
+          const fabricObjects = elements.map((el) => createFabricObject(el));
+          canvas.add(...fabricObjects);
+          if (fabricObjects.length > 0) {
+            canvas.setActiveObject(fabricObjects[0]);
+          }
+          canvas.requestRenderAll();
+          useEditorStore.getState().addElements(elements);
+        } else {
+          useEditorStore.getState().addElementsToPage(sourcePageId, elements);
+        }
+
+        useEditorStore.getState().markUnsaved();
+        useEditorStore.getState().setOcrSuccess(elements.length);
+      } catch (error) {
+        const code =
+          error instanceof OcrFlowError ? error.code : 'httpError';
+        useEditorStore.getState().setOcrError(code);
+      }
+    };
+
+    run();
+  }, [triggeredOcr, canvasReady, canvasInstanceRef]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const clipboardItems = useEditorStore((s) => s.clipboard);

@@ -76,10 +76,39 @@ if (ai.ocr) {
 
 ## Next Steps
 
-- ~~ETAPA 32: First real OCR provider integration~~ **CONCLUDED** — Google Cloud Vision + FakeOCRProvider
-- ETAPA 33: Convert DetectedText to TextElement
+- ~~ETAPA 32: First real OCR provider integration~~ **CONCLUDED** — PaddleOCR (PP-OCRv5) + Google Cloud Vision + FakeOCRProvider
+- ~~ETAPA 33: Convert DetectedText to TextElement~~ **CONCLUDED** — `src/editor/ocr/` (see below)
 - ETAPA 35: First real Inpainting integration
 - ETAPA 37: First real Segmentation integration
 - ETAPA 43: First real Background Removal integration
 - ETAPA 44: Logo detection via Vision Analysis
 - ETAPA 45: Full Desmontar Criativo pipeline
+
+## OCRResult → TextElement (ETAPA 33)
+
+The application layer that turns OCR detections into editable text layers lives
+outside `src/ai/` (the AI module stays Fabric/editor-decoupled):
+
+```
+src/editor/ocr/
+  ocr-to-elements.ts   # convertDetectedTextsToTextElements (pure, testable)
+  ocr-flow.ts          # runOcrDetectText (HTTP + safety + orchestration)
+```
+
+Flow:
+
+```
+ImageElement (selected)
+  → blob (fetch src)
+  → POST /api/ai/ocr          (Vercel → PaddleOCRProvider → Render PP-OCRv5)
+  → OCRResult { detectedTexts }
+  → convertDetectedTextsToTextElements()
+  → TextElement[]             (coordinates mapped natural-image → canvas)
+  → editor store (batch) + Fabric IText layers
+```
+
+Coordinate mapping (`mapImageRectToCanvas`) honours the source image transform:
+scale, offset, rotation, flip, and crop offset. Text rotation also incorporates
+a simple orientation estimate from the detection polygon. Font size is derived
+from the bounding-box height (approximation, not pixel-perfect).
+
