@@ -39,8 +39,9 @@
 **Última atualização:** 2026-08-11
 
 **Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
-**Preview URL:** https://editor-fotos-3wkwn1nvs-viniciusflas-projects.vercel.app
-**Commit:** 3525fff — fix: complete final post-qa cleanup — 11 resolved, 0 open
+**Production URL:** https://editor-fotos-jet.vercel.app
+**Commit:** f0dfa48 — docs: deploy checkpoint 32.2, functional audit report
+**Preview URL:** https://editor-fotos-lgom8d3tt-viniciusflas-projects.vercel.app
 **Commit:** c43bf80 — feat: add text editing, page deletion, and i18n (pt-BR, en, es)
 
 ### QA MVP — Status
