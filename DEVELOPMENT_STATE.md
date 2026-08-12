@@ -38,21 +38,26 @@
 **Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
 **Última atualização:** 2026-08-12
 
-### Render Build Fix (PaddleOCR)
+### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 
-**libgl1-mesa-glx → libgl1**
+**Status:** CONCLUIDO
 
-**Status:** DEPLOYED & VALIDATED
+**Upgrade:** paddleocr 2.10.0 → 3.4.1 (PP-OCRv5 latin mobile), paddlepaddle 3.1.1 → 3.3.1
 
-**Live OCR:** PASS (4 detected texts, confidence 0.97-0.99)
+**Model:** PP-OCRv5_mobile_det + latin_PP-OCRv5_mobile_rec (14 MB, 84.7% acc)
+
+**Portuguese accuracy:** 100% — "PROMOÇÃO", "ATÉ", "AÇÃO", "PREÇO", "CONDIÇÃO", "VOCÊ" todos corretos
+
+**Memory stability:** 5/5 sequential OCR (HTTP 200). Fixes: MKLDNN off, naive_best_fit allocator, 640px resize, try_shrink_memory.
 
 **Granularity:** LINE (each text = one line)
 
-**Performance:** First OCR ~5-7s, cold start ~3.5s model load
+**Performance:** startup ~8-9s, OCR ~25-29s (0.1 CPU Render Free)
 
-**Note:** Container OOM after first OCR call on Render Free (512 MB). Each OCR triggers container restart. Functional but slow.
+**Render Free verdict:** A — FITS RENDER FREE
 
-**Accents:** Limited — "PROMOÇÃO" → "PROMOCAO", "ATÉ" → "ATE". Arial font rendering or latin model limitation.
+**Última etapa oficial:** ETAPA 32
+**Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
 
 **Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
 **Production URL:** https://editor-fotos-jet.vercel.app
