@@ -90,4 +90,4 @@ async def ocr(file: UploadFile = File(...)):
         return JSONResponse(content={"detectedTexts": results})
     except Exception as e:
         logger.error(f"OCR failed: {e}")
-        raise HTTPException(status_code=500, detail="OCR processing failed")
+        raise HTTPException(status_code=500, detail=f"OCR processing failed: {e}")

@@ -3,6 +3,7 @@ PaddleOCR engine wrapper for PP-OCRv5 (latin model).
 Supports pt-BR, en, es with angle classification.
 """
 import logging
+import numpy as np
 from PIL import Image
 import io
 from paddleocr import PaddleOCR
@@ -22,8 +23,9 @@ class OCREngine:
           - id, text, boundingBox, polygon, confidence, language
         """
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        image_np = np.array(image)
 
-        result = self.ocr.ocr(image, cls=True)
+        result = self.ocr.ocr(image_np, cls=True)
 
         if not result or not result[0]:
             return []
