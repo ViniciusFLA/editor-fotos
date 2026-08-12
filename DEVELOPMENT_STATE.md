@@ -57,6 +57,22 @@
 
 **naturalWidth/naturalHeight:** adicionados ao ImageElement (persistidos) para mapeamento correto.
 
+### CHECKPOINT 33.1 — Production Validation
+
+**Status:** DEPLOYED — AWAITING MANUAL UI VALIDATION
+
+**Commit:** d2dce9d — feat: ETAPA 33 — OCR to editable text layers
+
+**Production:** https://editor-fotos-jet.vercel.app (match local HEAD: YES)
+
+**Build:** tsc PASS, eslint PASS, next build PASS
+
+**OCR backend:** GET /api/ai/ocr → `{ configured: true, provider: "paddleocr" }`
+
+**Live OCR (Vercel → Render):** HTTP 200, 3 textos com acentos (PROMOÇÃO / ATÉ / COMPRE AGORA), ~64s (cold start)
+
+**Manual UI validation:** pendente (checklist A–P registrado no relatório do checkpoint)
+
 ### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 
 **Status:** CONCLUIDO
