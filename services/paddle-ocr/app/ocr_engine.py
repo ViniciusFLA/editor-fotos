@@ -12,7 +12,8 @@ logger = logging.getLogger("paddle-ocr")
 
 class OCREngine:
     def __init__(self):
-        self.ocr = PaddleOCR(lang="latin", use_angle_cls=True)
+        logger.info("Initializing PaddleOCR without angle classification to reduce memory")
+        self.ocr = PaddleOCR(lang="latin", use_angle_cls=False, use_gpu=False)
 
     def detect(self, image_bytes: bytes) -> list[dict]:
         """
@@ -26,7 +27,7 @@ class OCREngine:
             tmp_path = tmp.name
 
         try:
-            result = self.ocr.ocr(tmp_path, cls=True)
+            result = self.ocr.ocr(tmp_path)
         finally:
             os.unlink(tmp_path)
 
