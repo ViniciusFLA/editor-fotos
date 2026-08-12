@@ -4,10 +4,13 @@ Supports pt-BR, en, es with angle classification.
 """
 import logging
 import numpy as np
-import cv2
+from PIL import Image
+import io
 from paddleocr import PaddleOCR
 
 logger = logging.getLogger("paddle-ocr")
+
+MAX_DIMENSION = 1600
 
 
 class OCREngine:
@@ -21,13 +24,20 @@ class OCREngine:
         Returns list of dicts with:
           - id, text, boundingBox, polygon, confidence, language
         """
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        if img_bgr is None:
-            raise ValueError("Failed to decode image")
+        original_w, original_h = image.size
+        scale = 1.0
 
-        result = self.ocr.ocr(img_bgr, cls=True)
+        if max(original_w, original_h) > MAX_DIMENSION:
+            scale = MAX_DIMENSION / max(original_w, original_h)
+            new_w = int(original_w * scale)
+            new_h = int(original_h * scale)
+            image = image.resize((new_w, new_h), Image.LANCZOS)
+
+        image_np = np.array(image)[:, :, ::-1].copy()
+
+        result = self.ocr.ocr(image_np, cls=True)
 
         if not result or not result[0]:
             return []
@@ -38,6 +48,9 @@ class OCREngine:
                 continue
 
             box_points, (text, confidence) = line[0], line[1]
+
+            if scale != 1.0:
+                box_points = [[p[0] / scale, p[1] / scale] for p in box_points]
 
             xs = [p[0] for p in box_points]
             ys = [p[1] for p in box_points]
