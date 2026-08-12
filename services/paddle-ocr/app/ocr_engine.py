@@ -43,21 +43,25 @@ class OCREngine:
             results = list(self.ocr.predict(img_bgr))
 
             for res in results:
-                rec_texts = res.get("rec_texts", []) or []
-                rec_scores = res.get("rec_scores", []) or []
-                rec_polys = res.get("rec_polys", []) or []
-                rec_boxes = res.get("rec_boxes", []) or []
+                rec_texts = res.get("rec_texts")
+                rec_scores = res.get("rec_scores")
+                rec_polys = res.get("rec_polys")
+                rec_boxes = res.get("rec_boxes")
+
+                if rec_texts is None:
+                    continue
 
                 for idx, raw in enumerate(rec_texts):
                     confidence = None
-                    if isinstance(raw, (tuple, list)):
-                        text = raw[0] if len(raw) > 0 else ""
+                    if isinstance(raw, (tuple, list)) and len(raw) > 0:
+                        text = raw[0]
                         if len(raw) > 1:
                             confidence = raw[1]
                     else:
                         text = raw
 
-                    if not text or not str(text).strip():
+                    text = str(text) if text is not None else ""
+                    if not text.strip():
                         continue
 
                     if confidence is None and rec_scores is not None and idx < len(rec_scores):

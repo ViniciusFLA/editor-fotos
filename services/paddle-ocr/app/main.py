@@ -7,6 +7,7 @@ Single model instance loaded at startup, reused across requests.
 import os
 import time
 import logging
+import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -89,5 +90,5 @@ async def ocr(file: UploadFile = File(...)):
         results = engine.detect(contents)
         return JSONResponse(content={"detectedTexts": results})
     except Exception as e:
-        logger.error(f"OCR failed: {e}")
+        logger.error(f"OCR failed: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"OCR processing failed: {e}")
