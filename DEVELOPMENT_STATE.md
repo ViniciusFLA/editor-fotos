@@ -87,6 +87,20 @@
 
 **Backend:** GET/POST OCR continuam PASS em produção.
 
+### CHECKPOINT 33.3 — Production OCR Availability Fix
+
+**Status:** DIAGNOSED — RENDER FREE UNSTABLE WITH REAL CREATIVE
+
+**Bug:** "Detectar texto" em criativo complexo retorna "Serviço temporariamente indisponível" (retry esgota).
+
+**Root cause:** OOM no Render Free. Baseline de memória do serviço PaddleOCR = **431 MB** (Python + paddle + paddlex + modelos PP-OCRv5) após o load, sobrando ~81 MB dos 512 MB. Imagem simples (3 textos) usa ~61 MB → cabe (~492 MB). Criativo complexo (21+ textos) usa >100 MB → OOM → container reinicia → 502.
+
+**Evidência:** `/health` retorna `memory_mb: 431` (baseline); após OCR simples sobe para `492.5`. POST de imagem complexa → 502 e `/health` passa a retornar página 502 (container reiniciou).
+
+**Tentativas sem efeito:** `text_recognition_batch_size=1`, `MAX_DIMENSION 640→512`, `FLAGS_allocator_strategy=naive_best_fit`, `try_shrink_memory` (não alcança o predictor real).
+
+**Direção futura (não aplicada):** reduzir baseline (engine `onnxruntime` em vez de `paddle_static`), plano pago do Render, ou host alternativo com mais RAM.
+
 ### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 
 **Status:** CONCLUIDO
