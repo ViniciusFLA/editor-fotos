@@ -28,6 +28,31 @@ class OCREngine:
         )
         logger.info("PP-OCRv5 latin models loaded")
 
+    def _shrink_memory(self):
+        try:
+            pipeline = getattr(self.ocr, "paddlex_pipeline", None)
+            if pipeline is None:
+                return
+            seen = set()
+            queue = [pipeline]
+            while queue:
+                obj = queue.pop()
+                if id(obj) in seen:
+                    continue
+                seen.add(id(obj))
+                predictor = getattr(obj, "predictor", None)
+                if predictor is not None and hasattr(predictor, "try_shrink_memory"):
+                    try:
+                        predictor.try_shrink_memory()
+                    except Exception:
+                        pass
+                for attr in ("text_det_model", "text_rec_model", "_pipeline", "paddlex_pipeline"):
+                    child = getattr(obj, attr, None)
+                    if child is not None and child is not pipeline:
+                        queue.append(child)
+        except Exception:
+            pass
+
     def detect(self, image_bytes: bytes) -> list[dict]:
         """
         Run OCR on image bytes and return DetectedText-like results.
@@ -120,5 +145,6 @@ class OCREngine:
 
         del img_bgr, nparr, results
         gc.collect()
+        self._shrink_memory()
 
         return texts
