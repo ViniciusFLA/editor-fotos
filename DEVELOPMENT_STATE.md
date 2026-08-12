@@ -59,10 +59,25 @@
 **Última etapa oficial:** ETAPA 32
 **Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
 
-**Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
+### CHECKPOINT 32.6 — PaddleOCR Vercel End-to-End
+
+**Status:** CONCLUIDO
+
+**Vercel config:** OCR_PROVIDER=paddleocr, OCR_SERVICE_URL, OCR_SERVICE_TOKEN (Production, server-side)
+
+**Config check:** GET /api/ai/ocr → `{ configured: true, provider: "paddleocr" }`
+
+**End-to-end:** POST /api/ai/ocr → HTTP 200, 3 detected texts, acentos 100%
+
+**Error mapping:** sem arquivo → 400 INVALID_INPUT, MIME inválido → 415 UNSUPPORTED_INPUT (sanitizado)
+
+**Timeout:** 90s (cold start + OCR)
+
+**Segurança:** token server-side only, sem NEXT_PUBLIC, browser → Vercel → Render
+
+**Deploy mais recente:** CHECKPOINT 32.6 — PaddleOCR Vercel End-to-End — 2026-08-12
 **Production URL:** https://editor-fotos-jet.vercel.app
-**Commit:** f0dfa48 — docs: deploy checkpoint 32.2, functional audit report
-**Preview URL:** https://editor-fotos-lgom8d3tt-viniciusflas-projects.vercel.app
+**Commit:** c4f346f — fix: increase PaddleOCR provider timeout to 90s
 **Commit:** c43bf80 — feat: add text editing, page deletion, and i18n (pt-BR, en, es)
 
 ### QA MVP — Status
