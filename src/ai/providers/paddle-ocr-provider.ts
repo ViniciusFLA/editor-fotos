@@ -33,7 +33,7 @@ export class PaddleOCRProvider implements OCRProvider {
     }
     this.config = {
       serviceUrl: config.serviceUrl.replace(/\/$/, ''),
-      timeoutMs: config.timeoutMs ?? 30000,
+      timeoutMs: config.timeoutMs ?? 90000,
       token: config.token,
     };
   }
