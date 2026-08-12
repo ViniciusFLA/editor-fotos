@@ -16,7 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Pre-download PaddleOCR models during build
-RUN python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(lang='latin', use_angle_cls=False, use_gpu=False); del ocr"
+RUN python -c "from paddleocr import PaddleOCR; ocr = PaddleOCR(text_detection_model_name='PP-OCRv5_mobile_det', text_recognition_model_name='latin_PP-OCRv5_mobile_rec', use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=False, device='cpu'); del ocr"
 
 COPY app/ ./app/
 
