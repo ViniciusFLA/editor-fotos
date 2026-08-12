@@ -11,6 +11,8 @@ from paddleocr import PaddleOCR
 
 logger = logging.getLogger("paddle-ocr")
 
+MAX_DIMENSION = 800
+
 
 class OCREngine:
     def __init__(self):
@@ -38,12 +40,17 @@ class OCREngine:
         if img_bgr is None:
             raise ValueError("Failed to decode image")
 
+        h, w = img_bgr.shape[:2]
+        scale = 1.0
+        if max(h, w) > MAX_DIMENSION:
+            scale = MAX_DIMENSION / max(h, w)
+            new_w = int(w * scale)
+            new_h = int(h * scale)
+            img_bgr = cv2.resize(img_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+
         texts = []
         with self._lock:
-            results = list(self.ocr.predict(
-                img_bgr,
-                text_det_limit_side_len=736,
-            ))
+            results = list(self.ocr.predict(img_bgr))
 
             for res in results:
                 rec_texts = res.get("rec_texts")
@@ -74,15 +81,18 @@ class OCREngine:
                     if rec_polys is not None and idx < len(rec_polys):
                         for p in rec_polys[idx]:
                             polygon.append({
-                                "x": int(float(p[0])),
-                                "y": int(float(p[1])),
+                                "x": int(float(p[0]) / scale),
+                                "y": int(float(p[1]) / scale),
                             })
 
                     bounding_box = None
                     if rec_boxes is not None and idx < len(rec_boxes):
                         box = rec_boxes[idx]
                         if len(box) >= 4:
-                            x1, y1, x2, y2 = (int(float(v)) for v in box[:4])
+                            x1 = int(float(box[0]) / scale)
+                            y1 = int(float(box[1]) / scale)
+                            x2 = int(float(box[2]) / scale)
+                            y2 = int(float(box[3]) / scale)
                             bounding_box = {
                                 "x": x1,
                                 "y": y1,
