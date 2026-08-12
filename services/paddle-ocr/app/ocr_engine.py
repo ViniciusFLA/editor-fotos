@@ -11,7 +11,7 @@ from paddleocr import PaddleOCR
 
 logger = logging.getLogger("paddle-ocr")
 
-MAX_DIMENSION = 640
+MAX_DIMENSION = 512
 
 
 class OCREngine:
