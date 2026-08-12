@@ -42,7 +42,17 @@
 
 **libgl1-mesa-glx → libgl1**
 
-**Status:** AWAITING RENDER REDEPLOY
+**Status:** DEPLOYED & VALIDATED
+
+**Live OCR:** PASS (4 detected texts, confidence 0.97-0.99)
+
+**Granularity:** LINE (each text = one line)
+
+**Performance:** First OCR ~5-7s, cold start ~3.5s model load
+
+**Note:** Container OOM after first OCR call on Render Free (512 MB). Each OCR triggers container restart. Functional but slow.
+
+**Accents:** Limited — "PROMOÇÃO" → "PROMOCAO", "ATÉ" → "ATE". Arial font rendering or latin model limitation.
 
 **Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
 **Production URL:** https://editor-fotos-jet.vercel.app
