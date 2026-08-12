@@ -4,8 +4,7 @@ Supports pt-BR, en, es with angle classification.
 """
 import logging
 import numpy as np
-from PIL import Image
-import io
+import cv2
 from paddleocr import PaddleOCR
 
 logger = logging.getLogger("paddle-ocr")
@@ -22,10 +21,13 @@ class OCREngine:
         Returns list of dicts with:
           - id, text, boundingBox, polygon, confidence, language
         """
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        image_np = np.array(image)
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img_bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
-        result = self.ocr.ocr(image_np, cls=True)
+        if img_bgr is None:
+            raise ValueError("Failed to decode image")
+
+        result = self.ocr.ocr(img_bgr, cls=True)
 
         if not result or not result[0]:
             return []
