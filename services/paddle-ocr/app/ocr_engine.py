@@ -40,7 +40,10 @@ class OCREngine:
 
         texts = []
         with self._lock:
-            results = list(self.ocr.predict(img_bgr))
+            results = list(self.ocr.predict(
+                img_bgr,
+                text_det_limit_side_len=736,
+            ))
 
             for res in results:
                 rec_texts = res.get("rec_texts")
