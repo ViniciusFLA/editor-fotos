@@ -36,7 +36,13 @@
 **ETAPA 32 — OCR Provider** — CONCLUIDA
 
 **Próxima etapa:** ETAPA 33 — OCR → Editable Text Layers
-**Última atualização:** 2026-08-11
+**Última atualização:** 2026-08-12
+
+### Render Build Fix (PaddleOCR)
+
+**libgl1-mesa-glx → libgl1**
+
+**Status:** AWAITING RENDER REDEPLOY
 
 **Deploy mais recente:** FINAL MVP CHECKPOINT — Post-QA Cleanup — 2026-08-11
 **Production URL:** https://editor-fotos-jet.vercel.app
