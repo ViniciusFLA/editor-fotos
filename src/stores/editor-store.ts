@@ -68,6 +68,7 @@ interface EditorStore {
   addElementsToPage: (pageId: string, elements: AnyElement[]) => void;
   removeElement: (id: string) => void;
   updateElement: (id: string, updates: Partial<AnyElement>) => void;
+  updateElementInPage: (pageId: string, id: string, updates: Partial<AnyElement>) => void;
   setSelectedElementIds: (ids: string[]) => void;
   setPendingImageSrc: (src: string | null) => void;
   setUploadError: (error: string | null) => void;
@@ -288,6 +289,28 @@ export const useEditorStore = create<EditorStore>((set) => ({
         ),
       ),
     ),
+
+  updateElementInPage: (pageId, id, updates) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+      return {
+        elements: isActive
+          ? state.elements.map((el) =>
+              el.id === id ? ({ ...el, ...updates } as AnyElement) : el,
+            )
+          : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId
+            ? {
+                ...p,
+                elements: p.elements.map((el) =>
+                  el.id === id ? ({ ...el, ...updates } as AnyElement) : el,
+                ),
+              }
+            : p,
+        ),
+      };
+    }),
 
   setSelectedElementIds: (ids) => set({ selectedElementIds: ids }),
 

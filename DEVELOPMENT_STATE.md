@@ -35,9 +35,10 @@
 
 **ETAPA 32 — OCR Provider** — CONCLUIDA
 **ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
+**ETAPA 34 — Text Masks** — CONCLUIDA
 
-**Próxima etapa:** ETAPA 34 — Text Masks
-**Última atualização:** 2026-08-12
+**Próxima etapa:** ETAPA 35 — Text Inpainting
+**Última atualização:** 2026-08-13
 
 ### ETAPA 33 — OCR → Editable Text Layers
 
@@ -56,6 +57,44 @@
 **UI:** botão "Detectar texto" na aba IA (i18n pt-BR/en/es), disabled sem 1 imagem selecionada, loading/erro/sucesso.
 
 **naturalWidth/naturalHeight:** adicionados ao ImageElement (persistidos) para mapeamento correto.
+
+### ETAPA 34 — Text Masks
+
+**Status:** COMPLETED + MANUALLY VALIDATED IN PRODUCTION
+
+**Checkpoints:** 34.1 (z-order fix) COMPLETED · 34.2 (OCR text hit-test fix) COMPLETED · 34.3 (finalização + commit) COMPLETED. Validação manual em produção: PASS (usuário selecionou/interagiu com uma OCR text layer com bounding box + controles Fabric).
+
+**Implementation:** `src/editor/masks/` (`text-mask.ts` constrói máscaras; `inpaint.ts` inpainting determinístico; `mask-restore.ts` restaura ao deletar layer). Integração em `ocr-flow.ts`, `canvas-area.tsx` (efeito OCR), `use-keyboard-shortcuts.ts` (delete). Checkpoint 34.1/34.2: o efeito OCR adiciona as text layers **diretamente** (sem rebuild) e atualiza o src da imagem via `setSrc` — rebuild causava regressão de hit-testing/stacking (text layers atrás da imagem).
+
+**Mask strategy:** polygon-first (PP-OCRv5 real polygon) com fallback para bounding box; padding conservador configurável (`DEFAULT_MASK_PADDING=3`); confidence filter (`DEFAULT_MIN_CONFIDENCE=0.6` — OCR ruim não é mascarado).
+
+**Inpainting:** preenchimento determinístico local (média ponderada por distância inversa dos pixels vizinhos em 8 direções). Sem API paga/modelo generativo. Original preservado em `originalSrc` (nunca destruído).
+
+**Polygon support:** sim — polígono real (inclui texto rotacionado/inclinado); bbox apenas como fallback.
+
+**Undo/redo:** via snapshots de histórico existentes (máscaras + src + originalSrc fazem parte do elemento). Move/edit/rotate da layer NÃO move a máscara (máscara em coordenadas naturais da imagem).
+
+**Save/load:** máscaras serializadas como JSON; `src`/`originalSrc` convertidos para data URL (`project-serializer.ts`).
+
+**Export:** usa o `src` mascarado (canvas.toDataURL) — texto original não reaparece.
+
+**Delete policy:** deletar layer OCR → desabilita a máscara vinculada e recomputa a imagem a partir do original (reversível).
+
+**Tests:** 26 testes unitários (Vitest) — `src/editor/masks/text-mask.test.ts` + `inpaint.test.ts` + `ocr-to-elements.test.ts` — cobrem polygon-first, bbox fallback, padding, confidence filter, linkage, múltiplos textos, texto rotacionado, fundo sólido/escuro/gradiente, layers acima da imagem (invariante de z-order). `npm test` = 26/26 PASS; `tsc` PASS; `eslint` PASS; `next build` PASS.
+
+**Known limitations (fidelidade visual — não bloqueiam a funcionalidade base):**
+1. Inpainting determinístico simples (média dos vizinhos); fundos complexos podem apresentar artefatos.
+2. Fonte da OCR text layer pode não corresponder à original.
+3. Cor pode não corresponder à original (default `#000000`).
+4. Font weight/style pode não corresponder.
+5. Tamanho pode precisar de refinamento (aproximação por altura do bbox).
+6. Posicionamento/alinhamento pode precisar de refinamento.
+7. OCR pode gerar ruído/leituras incorretas (threshold de confidence = 0.6 mitiga).
+8. Textos pequenos podem ficar sobrepostos.
+9. Duplicar página/imagem não preserva o vínculo mask↔layer (`textLayerId`).
+10. Delete→restore possui caso-limite assíncrono (~1-2s de recomputação).
+11. Sem UI completa para gerenciamento das masks (toggle ON/OFF).
+12. Criativo complexo (fotografia) ainda gera inpainting imperfeito — será tratado na ETAPA 35.
 
 ### CHECKPOINT 33.1 — Production Validation
 
@@ -100,6 +139,42 @@
 **Tentativas sem efeito:** `text_recognition_batch_size=1`, `MAX_DIMENSION 640→512`, `FLAGS_allocator_strategy=naive_best_fit`, `try_shrink_memory` (não alcança o predictor real).
 
 **Direção futura (não aplicada):** reduzir baseline (engine `onnxruntime` em vez de `paddle_static`), plano pago do Render, ou host alternativo com mais RAM.
+
+### CHECKPOINT 33.4 — ONNX Runtime ARM64 Feasibility
+
+**Status:** CONCLUIDO — DECISION: A — ONNX ARM64 APPROVED
+
+**Prova:** Oracle Ampere A1 (aarch64) executa PP-OCRv5 via ONNX Runtime 1.28.0 (CPUExecutionProvider) sem PaddlePaddle. PP-OCRv5 mobile det + latin rec (ONNX, opset 14). Acentos 100%, bounding boxes válidos, criativo 1254×1254 (29 regiões), 5 OCRs sequenciais estáveis (~682–731 MB), sem SIGSEGV/OOM/restart. Protótipo em `/opt/editor-fotos-ocr-onnx/` (container `editor-fotos-ocr-onnx`, `--cpus=1.0 --memory=3g`).
+
+### CHECKPOINT 33.5 — Oracle ONNX Production Readiness
+
+**Status:** CONCLUIDO — DECISION: D — NETWORK/HTTPS/AUTH BLOCKER
+
+**Validado (PASS):** baseline saudável (Afiliados HTTP 200, PM2/PostgreSQL/Nginx ativos); auth no Oracle (`/health` público, `/ocr` 401 sem/inválido token, 200 com token — token em `.env` chmod 600); qualidade OCR equivalente/melhor (acentos 100%: Ã Ç É Á Ô Ú ç ã é à; números/moeda/email/telefone corretos; divergência "50% OFF" é isolada — segmentação de detecção, não reconhecimento); 10 OCRs sequenciais estáveis (~566 MB, sem OOM/restart, Afiliados 200); memória estável (~518 MB após 5 min idle, sem leak).
+
+**Blockers (migração NÃO executada):**
+1. **HTTPS/DNS:** sem acesso a DNS para criar subdomínio (`ocr.companykn.com` → VM). `companykn.com` atrás do Cloudflare (sem credenciais). Nginx do Afiliados (`report.companykn.com`) não pode ser alterado. Sem caminho para certificado HTTPS para IP público. Alternativas (Cloudflare Tunnel) exigem credenciais não disponíveis.
+2. **Token:** `OCR_SERVICE_TOKEN` é write-only no Vercel (tipo sensitive/encrypted — `vercel env pull` retorna vazio). Não recuperável para reutilizar no Oracle nem para rollback seguro.
+
+**Produção:** Render `https://editor-fotos-paddle-ocr.onrender.com` mantido como fallback (OCR_PROVIDER=paddleocr, inalterado). Vercel inalterado.
+
+**Próximo passo (não executado):** para migrar, é necessário (a) DNS/Cloudflare para endpoint HTTPS dedicado do Oracle, e (b) token recuperável/novo token coordenado entre Vercel e Oracle com rollback documentado.
+
+### CHECKPOINT 33.6A/B/C — Tailscale Funnel + Oracle Cutover
+
+**Status:** CONCLUIDO — DECISION: A — ORACLE OCR CUTOVER COMPLETE
+
+**33.6A:** Tailscale 1.102.2 instalado na Oracle (aarch64), máquina autenticada na tailnet `tail32082e.ts.net`.
+
+**33.6B:** Tailscale Funnel ativado — HTTPS público `https://vnic-afiliado.tail32082e.ts.net` → `127.0.0.1:18080` (TLS válido, `--bg` persistente). Porta 18080 permaneceu `127.0.0.1` (não exposta publicamente); Nginx/DNS/SSL do Afiliados intocados.
+
+**33.6C:** Blocker de token/rollback (token antigo write-only + sem acesso Render). Resolvido via token compartilhado: **33.6C.1** gerou novo token (256 bits, criptograficamente seguro); **33.6C.2** sincronizou o mesmo token em Render + Oracle (rollback por troca de URL tornou-se possível).
+
+**33.6C.3 — Cutover:** Vercel Production → Oracle. `OCR_SERVICE_URL=https://vnic-afiliado.tail32082e.ts.net`, `OCR_SERVICE_TOKEN`=token compartilhado, `OCR_PROVIDER=paddleocr` (inalterado, rótulo de proxy HTTP genérico). Redeploy Production `editor-fotos-jet.vercel.app`.
+
+**Validação end-to-end (Vercel → Oracle):** GET config `{configured:true, provider:"paddleocr"}`; OCR simples 200 (~3s, acentos Ç/Ã/É); criativo real 200 (~5.7s, 29 regiões, acentos preservados). Sem OOM/SIGSEGV/restart. Afiliados HTTP 200 antes/durante/depois.
+
+**Render:** mantido como fallback (mesmo token compartilhado; rollback = trocar apenas `OCR_SERVICE_URL`).
 
 ### CHECKPOINT 32.5 — PaddleOCR Quality + Memory Optimization
 

@@ -13,6 +13,7 @@ export function deepCloneElement(el: AnyElement): AnyElement {
       return {
         ...img,
         filters: { ...img.filters },
+        textMasks: img.textMasks ? img.textMasks.map((m) => ({ ...m })) : undefined,
       };
     }
     case 'shape':
@@ -40,6 +41,9 @@ export function deepCloneElementWithNewIds(el: AnyElement): AnyElement {
         id: newId,
         assetId: generateId(),
         filters: { ...img.filters },
+        textMasks: img.textMasks
+          ? img.textMasks.map((m) => ({ ...m, sourceImageId: newId }))
+          : undefined,
       };
     }
     case 'shape':

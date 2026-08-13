@@ -42,6 +42,30 @@ export const ImageFiltersSchema = z.object({
   grayscale: z.boolean(),
 });
 
+export const TextMaskPointSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+});
+
+export type TextMaskPoint = z.infer<typeof TextMaskPointSchema>;
+
+export const TextMaskSchema = z.object({
+  id: z.string(),
+  sourceImageId: z.string(),
+  textLayerId: z.string(),
+  polygon: z.array(TextMaskPointSchema),
+  boundingBox: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+  padding: z.number(),
+  enabled: z.boolean(),
+});
+
+export type TextMask = z.infer<typeof TextMaskSchema>;
+
 export const ImageElementSchema = BaseElementSchema.extend({
   type: z.literal('image'),
   assetId: z.string(),
@@ -55,6 +79,8 @@ export const ImageElementSchema = BaseElementSchema.extend({
   filters: ImageFiltersSchema,
   naturalWidth: z.number().optional(),
   naturalHeight: z.number().optional(),
+  textMasks: z.array(TextMaskSchema).optional(),
+  originalSrc: z.string().optional(),
 });
 
 export const ShapeTypeSchema = z.enum(['rectangle', 'circle', 'line']);
@@ -124,6 +150,10 @@ export interface ImageElement extends EditorElement {
   filters: ImageFilters;
   naturalWidth?: number;
   naturalHeight?: number;
+  /** ETAPA 34 — text masks applied to the original image raster. */
+  textMasks?: TextMask[];
+  /** ETAPA 34 — the untouched original source (pre-masking). */
+  originalSrc?: string;
 }
 
 export interface ImageFilters {

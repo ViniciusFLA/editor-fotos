@@ -1,6 +1,8 @@
-import type { ImageElement, TextElement } from '@/types';
+import type { ImageElement, TextElement, TextMask } from '@/types';
 import type { OCRResult } from '@/ai/types/ocr';
 import { convertDetectedTextsToTextElements } from './ocr-to-elements';
+import { buildTextMasks } from '@/editor/masks/text-mask';
+import { applyMasksToImage } from '@/editor/masks/inpaint';
 import { useEditorStore } from '@/stores/editor-store';
 
 /**
@@ -31,6 +33,9 @@ export class OcrFlowError extends Error {
 
 export interface OcrFlowResult {
   elements: TextElement[];
+  masks: TextMask[];
+  /** Blob URL of the masked image (text removed), or null when no mask. */
+  maskedImageSrc: string | null;
   sourceImageId: string;
   sourcePageId: string;
 }
@@ -131,7 +136,7 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
   const sourcePageId = store.activePageId;
   const sourceImageId = image.id;
 
-  const blob = await fetchImageBlob(image.src);
+  const blob = await fetchImageBlob(image.originalSrc ?? image.src);
   console.info(`[OCR UI] file prepared: type=${blob.type || 'unknown'}, size=${blob.size}`);
 
   const formData = new FormData();
@@ -163,7 +168,20 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
     baseZIndex: Math.max(0, ...sourcePage.elements.map((el) => el.zIndex)) + 1,
   });
 
-  console.info(`[OCR UI] created=${elements.length}`);
+  const { masks } = buildTextMasks(result.detectedTexts, elements, sourceImageId);
 
-  return { elements, sourceImageId, sourcePageId };
+  let maskedImageSrc: string | null = null;
+  if (masks.length > 0) {
+    const baseSrc = image.originalSrc ?? image.src;
+    try {
+      const masked = await applyMasksToImage(baseSrc, masks);
+      maskedImageSrc = masked.src;
+    } catch (error) {
+      console.warn('[OCR UI] inpainting failed, keeping original image', error);
+    }
+  }
+
+  console.info(`[OCR UI] created=${elements.length} masks=${masks.length}`);
+
+  return { elements, masks, maskedImageSrc, sourceImageId, sourcePageId };
 }

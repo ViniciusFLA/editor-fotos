@@ -1,6 +1,7 @@
 import type { DetectedText, OCRResult } from '@/ai/types/ocr';
 import type { ImageElement, TextElement } from '@/types';
 import { generateId } from '@/utils';
+import { shouldKeepDetectedText, DEFAULT_MIN_CONFIDENCE } from '@/editor/masks/text-mask';
 
 /**
  * ETAPA 33 — OCR → Editable Text Layers (application layer).
@@ -205,6 +206,8 @@ export interface OcrToElementsInput {
   sourcePageId: string;
   /** First zIndex for the created layers (defaults to source image + 1). */
   baseZIndex?: number;
+  /** Minimum confidence to accept a detection as an editable layer. */
+  minConfidence?: number;
 }
 
 /**
@@ -220,12 +223,13 @@ export function convertDetectedTextsToTextElements(
 ): TextElement[] {
   const { result, sourceImage, baseZIndex } = input;
 
+  const minConfidence = input.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
   const startZ = baseZIndex ?? Math.max(0, sourceImage.zIndex) + 1;
 
   const elements: TextElement[] = [];
 
   result.detectedTexts.forEach((detected: DetectedText, index: number) => {
-    if (!detected.text || !detected.text.trim()) return;
+    if (!shouldKeepDetectedText(detected, minConfidence)) return;
 
     const bbox = detected.boundingBox;
     const mapped = mapImageRectToCanvas(sourceImage, bbox);

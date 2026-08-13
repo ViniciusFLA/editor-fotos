@@ -372,14 +372,24 @@ export function CanvasArea() {
 
     const store = useEditorStore.getState();
 
-    const rebuildOps = store.elements.map(async (el) => {
+    // Sort by zIndex so the base image (lowest) renders behind text layers.
+    // Await every object (image loads are async) and add them in z-order,
+    // preventing the async image from being added on top of the text layers.
+    const sorted = [...store.elements].sort((a, b) => a.zIndex - b.zIndex);
+
+    const tasks = sorted.map(async (el) => {
       const fabricObj = createFabricObject(el);
       const resolved = fabricObj instanceof Promise ? await fabricObj : fabricObj;
       setElementId(resolved, el.id);
-      canvas.add(resolved);
+      return resolved;
     });
 
-    Promise.allSettled(rebuildOps).then(() => {
+    Promise.allSettled(tasks).then((results) => {
+      results.forEach((result) => {
+        if (result.status === 'fulfilled') {
+          canvas.add(result.value);
+        }
+      });
       canvas.requestRenderAll();
       restoreSelectionAfterRebuild(canvas);
     });
@@ -560,7 +570,8 @@ export function CanvasArea() {
 
     const run = async () => {
       try {
-        const { elements, sourcePageId } = await runOcrDetectText();
+        const { elements, masks, maskedImageSrc, sourcePageId, sourceImageId } =
+          await runOcrDetectText();
 
         const canvas = canvasInstanceRef.current;
         const state = useEditorStore.getState();
@@ -571,14 +582,47 @@ export function CanvasArea() {
 
         pushHistoryImmediate(sourcePageId, sourceElements, sourceBackground);
 
+        // ETAPA 34 — apply text masks to the source image (original preserved).
+        // Update the live Fabric image object via setSrc (no full rebuild, so
+        // the text layers are added directly on top and remain interactive).
+        if (masks.length > 0 && maskedImageSrc) {
+          const imageEl = sourceElements.find(
+            (el) => el.id === sourceImageId,
+          ) as ImageElement | undefined;
+          if (imageEl) {
+            useEditorStore.getState().updateElementInPage(sourcePageId, sourceImageId, {
+              src: maskedImageSrc,
+              originalSrc: imageEl.originalSrc ?? imageEl.src,
+              textMasks: masks,
+            });
+
+            if (canvas && state.activePageId === sourcePageId) {
+              const fabricImage = findFabricObjectById(canvas, sourceImageId);
+              if (fabricImage instanceof FabricImage) {
+                try {
+                  await fabricImage.setSrc(maskedImageSrc);
+                } catch (err) {
+                  console.warn('[OCR] failed to swap masked image src', err);
+                }
+              }
+            }
+          }
+        }
+
+        // Add text layers directly (ETAPA 33 behaviour) so they stay interactive.
         if (state.activePageId === sourcePageId && canvas) {
-          const fabricObjects = elements.map((el) => createFabricObject(el));
+          const fabricObjects = await Promise.all(
+            elements.map(async (el) => {
+              const obj = createFabricObject(el);
+              return obj instanceof Promise ? await obj : obj;
+            }),
+          );
           canvas.add(...fabricObjects);
+          useEditorStore.getState().addElements(elements);
           if (fabricObjects.length > 0) {
-            canvas.setActiveObject(fabricObjects[0]);
+            canvas.setActiveObject(fabricObjects[0]!);
           }
           canvas.requestRenderAll();
-          useEditorStore.getState().addElements(elements);
         } else {
           useEditorStore.getState().addElementsToPage(sourcePageId, elements);
         }

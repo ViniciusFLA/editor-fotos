@@ -40,7 +40,11 @@ async function serializeElement(el: AnyElement): Promise<AnyElement> {
     if (src.startsWith('blob:')) {
       src = await blobUrlToDataUrl(src);
     }
-    return { ...img, src };
+    let originalSrc = img.originalSrc;
+    if (originalSrc && originalSrc.startsWith('blob:')) {
+      originalSrc = await blobUrlToDataUrl(originalSrc);
+    }
+    return { ...img, src, originalSrc };
   }
 
   if (el.type === 'group') {

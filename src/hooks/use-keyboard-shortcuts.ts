@@ -16,6 +16,7 @@ import {
   redo,
 } from '@/editor/history/history-manager';
 import { generateId, deepCloneElementWithNewIds } from '@/utils';
+import { restoreMasksForDeletedTexts } from '@/editor/masks/mask-restore';
 import type { AnyElement, GroupElement } from '@/types';
 
 interface UseKeyboardShortcutsParams {
@@ -52,6 +53,9 @@ export function useKeyboardShortcuts({
     canvas.requestRenderAll();
 
     ids.forEach((id) => store.removeElement(id));
+
+    // ETAPA 34 — deleting an OCR text layer restores its linked mask.
+    void restoreMasksForDeletedTexts(ids);
   }, [canvasInstanceRef, isTextEditingRef]);
 
   const handleDuplicate = useCallback(() => {
