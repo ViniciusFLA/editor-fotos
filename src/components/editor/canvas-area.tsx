@@ -19,13 +19,12 @@ import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
 import { useTranslation } from '@/i18n';
 import { fetchOcrResult, OcrFlowError } from '@/editor/ocr/ocr-flow';
 import { processOcrResult, EditableTextPipelineError, isResultStale } from '@/editor/pipeline/editable-text-pipeline';
+import { computeImageFitScale, DEFAULT_MAX_DIMENSION_RATIO } from '@/editor/core/image-fit';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
 import type { ImageElement, TextElement, ShapeElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
-
-const MAX_IMAGE_DIMENSION = 0.7;
 
 export function CanvasArea() {
   const { t } = useTranslation();
@@ -74,13 +73,18 @@ export function CanvasArea() {
 
         if (!fabricImage.width || !fabricImage.height) return;
 
-        const maxW = LOGICAL_WIDTH * MAX_IMAGE_DIMENSION;
-        const maxH = LOGICAL_HEIGHT * MAX_IMAGE_DIMENSION;
+        const maxW = LOGICAL_WIDTH * DEFAULT_MAX_DIMENSION_RATIO;
+        const maxH = LOGICAL_HEIGHT * DEFAULT_MAX_DIMENSION_RATIO;
 
         const naturalW = fabricImage.width;
         const naturalH = fabricImage.height;
 
-        const scaleRatio = Math.min(maxW / naturalW, maxH / naturalH, 1);
+        const scaleRatio = computeImageFitScale({
+          naturalWidth: naturalW,
+          naturalHeight: naturalH,
+          availableWidth: maxW,
+          availableHeight: maxH,
+        });
 
         const displayW = naturalW * scaleRatio;
         const displayH = naturalH * scaleRatio;
