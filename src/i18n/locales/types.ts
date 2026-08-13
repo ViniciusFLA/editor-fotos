@@ -168,6 +168,11 @@ export interface Translations {
         serviceUnavailable: string;
         pageRemoved: string;
         imageRemoved: string;
+        alreadyProcessed: string;
+        noTextDetected: string;
+        allDetectionsFiltered: string;
+        inpaintingFailed: string;
+        staleResult: string;
         unknown: string;
       };
     };

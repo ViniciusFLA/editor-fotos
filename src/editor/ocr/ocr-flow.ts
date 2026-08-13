@@ -1,16 +1,16 @@
-import type { ImageElement, TextElement, TextMask } from '@/types';
+import type { ImageElement } from '@/types';
 import type { OCRResult } from '@/ai/types/ocr';
-import { convertDetectedTextsToTextElements } from './ocr-to-elements';
-import { buildTextMasks } from '@/editor/masks/text-mask';
-import { applyMasksToImage } from '@/editor/masks/inpaint';
 import { useEditorStore } from '@/stores/editor-store';
+import { isImageAlreadyProcessed } from '@/editor/pipeline/editable-text-pipeline';
 
 /**
- * ETAPA 33 — client-side OCR flow.
+ * ETAPA 33 / 36 — client-side OCR retrieval.
  *
- * Orchestrates: selected ImageElement → blob → POST /api/ai/ocr → OCRResult →
- * TextElement[] with page/image safety checks. It does NOT touch Fabric.js —
- * canvas insertion is the responsibility of the caller (CanvasArea).
+ * Retrieves the raw OCR result for the selected image and performs the source
+ * safety checks (page/image existence) and the idempotency guard. The
+ * processing (confidence filter → mask → inpainting → TextElement) lives in
+ * `EditableTextPipeline` (`@/editor/pipeline/editable-text-pipeline`); the
+ * caller (CanvasArea) owns the atomic state commit and Fabric synchronization.
  */
 
 export type OcrFlowErrorCode =
@@ -19,7 +19,8 @@ export type OcrFlowErrorCode =
   | 'httpError'
   | 'serviceUnavailable'
   | 'pageRemoved'
-  | 'imageRemoved';
+  | 'imageRemoved'
+  | 'alreadyProcessed';
 
 export class OcrFlowError extends Error {
   readonly code: OcrFlowErrorCode;
@@ -31,13 +32,11 @@ export class OcrFlowError extends Error {
   }
 }
 
-export interface OcrFlowResult {
-  elements: TextElement[];
-  masks: TextMask[];
-  /** Blob URL of the masked image (text removed), or null when no mask. */
-  maskedImageSrc: string | null;
-  sourceImageId: string;
+export interface OcrFetchResult {
+  result: OCRResult;
+  sourceImage: ImageElement;
   sourcePageId: string;
+  sourceImageId: string;
 }
 
 const RETRYABLE_STATUSES = new Set([429, 502, 504]);
@@ -121,7 +120,12 @@ async function postOcr(formData: FormData): Promise<OCRResult> {
   throw new OcrFlowError('httpError', 'OCR failed');
 }
 
-export async function runOcrDetectText(): Promise<OcrFlowResult> {
+/**
+ * Select the source image, guard against re-entry on an already-processed
+ * image, run OCR against the service, and verify the source page/image still
+ * exist before returning the raw result.
+ */
+export async function fetchOcrResult(): Promise<OcrFetchResult> {
   const store = useEditorStore.getState();
 
   const selected = store.elements.filter((el) =>
@@ -135,6 +139,11 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
   const image = selected[0] as ImageElement;
   const sourcePageId = store.activePageId;
   const sourceImageId = image.id;
+
+  // Idempotency: do not re-run on an image that already has detected text.
+  if (isImageAlreadyProcessed(image)) {
+    throw new OcrFlowError('alreadyProcessed', 'Image already has detected text');
+  }
 
   const blob = await fetchImageBlob(image.originalSrc ?? image.src);
   console.info(`[OCR UI] file prepared: type=${blob.type || 'unknown'}, size=${blob.size}`);
@@ -161,27 +170,5 @@ export async function runOcrDetectText(): Promise<OcrFlowResult> {
     throw new OcrFlowError('imageRemoved', 'Source image was removed');
   }
 
-  const elements = convertDetectedTextsToTextElements({
-    result,
-    sourceImage: image,
-    sourcePageId,
-    baseZIndex: Math.max(0, ...sourcePage.elements.map((el) => el.zIndex)) + 1,
-  });
-
-  const { masks } = buildTextMasks(result.detectedTexts, elements, sourceImageId);
-
-  let maskedImageSrc: string | null = null;
-  if (masks.length > 0) {
-    const baseSrc = image.originalSrc ?? image.src;
-    try {
-      const masked = await applyMasksToImage(baseSrc, masks);
-      maskedImageSrc = masked.src;
-    } catch (error) {
-      console.warn('[OCR UI] inpainting failed, keeping original image', error);
-    }
-  }
-
-  console.info(`[OCR UI] created=${elements.length} masks=${masks.length}`);
-
-  return { elements, masks, maskedImageSrc, sourceImageId, sourcePageId };
+  return { result, sourceImage: image, sourcePageId, sourceImageId };
 }

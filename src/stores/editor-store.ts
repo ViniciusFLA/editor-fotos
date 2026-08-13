@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AnyElement, GroupElement, ImageElement, PageBackground, PageData } from '@/types';
+import type { AnyElement, GroupElement, ImageElement, PageBackground, PageData, TextElement, TextMask } from '@/types';
 import type { ShapeType } from '@/types';
 import { generateId, deepCloneElement, deepCloneElementWithNewIds } from '@/utils';
 import { saveProjectData, loadProjectData, getLastProjectId } from '@/lib/persistence';
@@ -66,6 +66,16 @@ interface EditorStore {
   addElement: (element: AnyElement) => void;
   addElements: (elements: AnyElement[]) => void;
   addElementsToPage: (pageId: string, elements: AnyElement[]) => void;
+  commitEditableTextResult: (
+    pageId: string,
+    imageId: string,
+    updates: {
+      maskedImageSrc: string | null;
+      masks: TextMask[];
+      elements: TextElement[];
+      originalSrc: string;
+    },
+  ) => void;
   removeElement: (id: string) => void;
   updateElement: (id: string, updates: Partial<AnyElement>) => void;
   updateElementInPage: (pageId: string, id: string, updates: Partial<AnyElement>) => void;
@@ -307,6 +317,34 @@ export const useEditorStore = create<EditorStore>((set) => ({
                   el.id === id ? ({ ...el, ...updates } as AnyElement) : el,
                 ),
               }
+            : p,
+        ),
+      };
+    }),
+
+  commitEditableTextResult: (pageId, imageId, updates) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+
+      const applyToElements = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (el.id !== imageId) return el;
+          const img = el as ImageElement;
+          return {
+            ...img,
+            src: updates.maskedImageSrc ?? img.src,
+            originalSrc: updates.originalSrc,
+            textMasks: updates.masks,
+          } as ImageElement;
+        });
+
+      return {
+        elements: isActive
+          ? [...applyToElements(state.elements), ...updates.elements]
+          : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId
+            ? { ...p, elements: [...applyToElements(p.elements), ...updates.elements] }
             : p,
         ),
       };

@@ -17,7 +17,8 @@ import { validateImageFile } from '@/lib/image-validation';
 import { downloadDataUrl, getExportFileName } from '@/lib/export-utils';
 import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
 import { useTranslation } from '@/i18n';
-import { runOcrDetectText, OcrFlowError } from '@/editor/ocr/ocr-flow';
+import { fetchOcrResult, OcrFlowError } from '@/editor/ocr/ocr-flow';
+import { processOcrResult, EditableTextPipelineError, isResultStale } from '@/editor/pipeline/editable-text-pipeline';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
 import type { ImageElement, TextElement, ShapeElement } from '@/types';
 
@@ -570,68 +571,80 @@ export function CanvasArea() {
 
     const run = async () => {
       try {
-        const { elements, masks, maskedImageSrc, sourcePageId, sourceImageId } =
-          await runOcrDetectText();
+        const { result, sourceImage, sourcePageId, sourceImageId } =
+          await fetchOcrResult();
 
-        const canvas = canvasInstanceRef.current;
+        // ETAPA 36 — single central pipeline (OCR → filter → mask → inpaint → TextElement).
+        const pipelineResult = await processOcrResult({
+          sourceImage,
+          ocrResult: result,
+          sourcePageId,
+        });
+
+        // Re-validate context right before the atomic commit (stale-result guard).
         const state = useEditorStore.getState();
-
-        const sourcePage = state.pages.find((p) => p.id === sourcePageId);
-        const sourceElements = sourcePage?.elements ?? state.elements;
-        const sourceBackground = sourcePage?.background ?? state.pageBackground;
-
-        pushHistoryImmediate(sourcePageId, sourceElements, sourceBackground);
-
-        // ETAPA 34 — apply text masks to the source image (original preserved).
-        // Update the live Fabric image object via setSrc (no full rebuild, so
-        // the text layers are added directly on top and remain interactive).
-        if (masks.length > 0 && maskedImageSrc) {
-          const imageEl = sourceElements.find(
-            (el) => el.id === sourceImageId,
-          ) as ImageElement | undefined;
-          if (imageEl) {
-            useEditorStore.getState().updateElementInPage(sourcePageId, sourceImageId, {
-              src: maskedImageSrc,
-              originalSrc: imageEl.originalSrc ?? imageEl.src,
-              textMasks: masks,
-            });
-
-            if (canvas && state.activePageId === sourcePageId) {
-              const fabricImage = findFabricObjectById(canvas, sourceImageId);
-              if (fabricImage instanceof FabricImage) {
-                try {
-                  await fabricImage.setSrc(maskedImageSrc);
-                } catch (err) {
-                  console.warn('[OCR] failed to swap masked image src', err);
-                }
-              }
-            }
-          }
+        if (isResultStale(state.pages, sourcePageId, sourceImageId)) {
+          useEditorStore.getState().setOcrError('staleResult');
+          return;
         }
 
-        // Add text layers directly (ETAPA 33 behaviour) so they stay interactive.
-        if (state.activePageId === sourcePageId && canvas) {
+        const sourcePage = state.pages.find((p) => p.id === sourcePageId);
+        if (!sourcePage) {
+          useEditorStore.getState().setOcrError('staleResult');
+          return;
+        }
+
+        pushHistoryImmediate(sourcePageId, sourcePage.elements, sourcePage.background);
+
+        // ETAPA 36 — atomic state commit: the source image (masked src + masks +
+        // originalSrc) and the new text layers are committed in a single store
+        // update, so no partial state can be observed.
+        useEditorStore.getState().commitEditableTextResult(sourcePageId, sourceImageId, {
+          maskedImageSrc: pipelineResult.maskedImageSrc,
+          masks: pipelineResult.masks,
+          elements: pipelineResult.elements,
+          originalSrc: pipelineResult.originalSrc,
+        });
+
+        // ETAPA 34 behaviour preserved: swap the live Fabric image via setSrc
+        // (no full rebuild) and add the OCR IText layers directly on top so they
+        // stay interactive.
+        const canvas = canvasInstanceRef.current;
+        if (canvas && state.activePageId === sourcePageId) {
+          const fabricImage = findFabricObjectById(canvas, sourceImageId);
+          if (fabricImage instanceof FabricImage) {
+            try {
+              await fabricImage.setSrc(pipelineResult.maskedImageSrc);
+            } catch (err) {
+              console.warn('[OCR] failed to swap masked image src', err);
+            }
+          }
+
           const fabricObjects = await Promise.all(
-            elements.map(async (el) => {
+            pipelineResult.elements.map(async (el) => {
               const obj = createFabricObject(el);
               return obj instanceof Promise ? await obj : obj;
             }),
           );
           canvas.add(...fabricObjects);
-          useEditorStore.getState().addElements(elements);
           if (fabricObjects.length > 0) {
             canvas.setActiveObject(fabricObjects[0]!);
           }
           canvas.requestRenderAll();
-        } else {
-          useEditorStore.getState().addElementsToPage(sourcePageId, elements);
         }
 
+        console.info(
+          `[OCR] pipeline metrics: ${JSON.stringify(pipelineResult.metrics)}`,
+        );
+
         useEditorStore.getState().markUnsaved();
-        useEditorStore.getState().setOcrSuccess(elements.length);
+        useEditorStore.getState().setOcrSuccess(pipelineResult.elements.length);
       } catch (error) {
         const code =
-          error instanceof OcrFlowError ? error.code : 'httpError';
+          error instanceof OcrFlowError ||
+          error instanceof EditableTextPipelineError
+            ? error.code
+            : 'httpError';
         useEditorStore.getState().setOcrError(code);
       }
     };

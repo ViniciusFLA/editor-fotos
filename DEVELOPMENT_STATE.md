@@ -37,8 +37,9 @@
 **ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
 **ETAPA 34 — Text Masks** — CONCLUIDA
 **ETAPA 35 — Text Inpainting** — PROVIDER AUDIT COMPLETED — ADVANCED PROVIDER DEFERRED
+**ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED — AWAITING USER MANUAL VALIDATION
 
-**Próxima etapa:** ETAPA 36 — Editable Text Pipeline
+**Próxima etapa:** ETAPA 37 — Segmentation Provider
 **Última atualização:** 2026-08-13
 
 ### ETAPA 33 — OCR → Editable Text Layers
@@ -130,6 +131,36 @@ Poderá futuramente virar recurso **Standard** (deterministic) vs **Premium** (A
 **Não alterado nesta execução (separado do inpainting):** font family, font color, font weight, font size, alignment, positioning e OCR noise (text layers).
 
 **Sem alteração funcional:** algoritmo determinístico, container OCR e dependências permanecem inalterados.
+
+### ETAPA 36 — Editable Text Pipeline
+
+**Status:** IMPLEMENTED — AWAITING USER MANUAL VALIDATION
+
+**Objetivo:** unificar OCR → confidence/filtering → mask → inpainting → TextElement em um pipeline transacional, previsível e resiliente, sem reinventar as peças da ETAPA 33/34 (organização, não reescrita).
+
+**Centralização:** `src/editor/pipeline/editable-text-pipeline.ts` — orquestrador puro (sem React/Fabric/Zustand):
+- `classifyDetections` — particiona detecções em accepted/rejected com motivo (`emptyText`, `lowConfidence`, `invalidGeometry`);
+- `buildEditableTextElementsAndMasks` — reutiliza `convertDetectedTextsToTextElements` (ETAPA 33) e `buildTextMasks` (ETAPA 34); preserva polygon-first → bbox fallback → padding e o vínculo `textLayerId`↔`sourceImageId`;
+- `processOcrResult` — roda os estágios e produz `EditableTextPipelineResult` (elements, masks, maskedImageSrc, originalSrc, rejectedDetections, metrics). Inpainting injetável (`config.inpaint`) — default determinístico, preparado para LaMa/ONNX/hosted futuros;
+- `isImageAlreadyProcessed` / `isResultStale` — idempotência e stale-result gate.
+
+**Estágios formais:** VALIDATE INPUT → OCR NORMALIZATION → CONFIDENCE FILTERING → GEOMETRY VALIDATION → MASK GENERATION → INPAINTING → TEXT ELEMENT GENERATION → STATE COMMIT → FABRIC SYNC → HISTORY SNAPSHOT.
+
+**Atomic state commit:** novo `commitEditableTextResult` no store — imagem (src mascarado + originalSrc + textMasks) e text layers são commitadas em **um único** `set()` (sem estado parcial). Falha fatal antes do commit (inpainting) lança `inpaintingFailed` e não muta nada.
+
+**Fluxo:** `left-sidebar` → `triggerOcrDetect` → `canvas-area` (efeito) → `fetchOcrResult` (HTTP + safety + idempotência) → `processOcrResult` (pipeline) → `isResultStale` re-check → `pushHistoryImmediate` (1 operação lógica) → `commitEditableTextResult` → `FabricImage.setSrc` + `canvas.add(IText)` (sem rebuild, preservando z-order/hit-testing da ETAPA 34).
+
+**Error model (unificado, sanitizado, i18n pt-BR/en/es):** `noTextDetected`, `allDetectionsFiltered`, `inpaintingFailed`, `alreadyProcessed`, `staleResult` + os existentes da ETAPA 33 (`requiresSingleImage`, `imageFetchFailed`, `httpError`, `serviceUnavailable`, `pageRemoved`, `imageRemoved`). Nenhum secret/token/stack exposto.
+
+**Idempotência (FASE 19):** opção A — bloquear. Imagem já processada (possui `originalSrc`) → `alreadyProcessed`. Dupla execução também bloqueada pelo guard `ocrStatus === 'loading'` no store.
+
+**Stale/delete/page-change (FASE 20–22):** resultado descartado com segurança se a página/imagem não existirem mais; commit direcionado à página de origem (`commitEditableTextResult(pageId, ...)`) não contamina outra página ativa.
+
+**Confidence/geometry:** mantém `DEFAULT_MIN_CONFIDENCE=0.6` (sem hardcode duplicado). Detecção abaixo do threshold NÃO gera mask/apaga texto/nem TextElement. Geometria inválida (bbox não-finito/≤0) rejeita somente aquela região, nunca o pipeline.
+
+**Tests:** 19 novos (Vitest) em `src/editor/pipeline/editable-text-pipeline.test.ts` — happy path, confidence filter, geometry (polygon inválido + bbox válido; ambos inválidos), partial invalids, all filtered, mask creation, text layer creation, integração de inpainting (injetável), atomic commit (ativo e página-trocada), fatal failure antes do commit, stale result, deleted source, idempotência, múltiplos textos, mask↔layer linking. `npm test` = 45/45 PASS (26 anteriores + 19 novos); `tsc` PASS; `eslint` PASS; `next build` PASS.
+
+**NÃO implementado nesta etapa (limitações conhecidas, fora do escopo do pipeline):** font matching/recognition, color/font-weight/italic/letter-spacing extraction, text effects, advanced alignment — continuam como limitações da ETAPA 33/34.
 
 ### CHECKPOINT 33.1 — Production Validation
 

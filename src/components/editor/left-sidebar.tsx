@@ -211,7 +211,12 @@ export function LeftSidebar() {
                   ocrError === 'httpError' ||
                   ocrError === 'serviceUnavailable' ||
                   ocrError === 'pageRemoved' ||
-                  ocrError === 'imageRemoved'
+                  ocrError === 'imageRemoved' ||
+                  ocrError === 'alreadyProcessed' ||
+                  ocrError === 'noTextDetected' ||
+                  ocrError === 'allDetectionsFiltered' ||
+                  ocrError === 'inpaintingFailed' ||
+                  ocrError === 'staleResult'
                   ? `editor.ai.error.${ocrError}`
                   : 'editor.ai.error.unknown',
               )}
