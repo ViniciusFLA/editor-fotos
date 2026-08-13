@@ -36,8 +36,9 @@
 **ETAPA 32 — OCR Provider** — CONCLUIDA
 **ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
 **ETAPA 34 — Text Masks** — CONCLUIDA
+**ETAPA 35 — Text Inpainting** — PROVIDER AUDIT COMPLETED — ADVANCED PROVIDER DEFERRED
 
-**Próxima etapa:** ETAPA 35 — Text Inpainting
+**Próxima etapa:** ETAPA 36 — Editable Text Pipeline
 **Última atualização:** 2026-08-13
 
 ### ETAPA 33 — OCR → Editable Text Layers
@@ -95,6 +96,40 @@
 10. Delete→restore possui caso-limite assíncrono (~1-2s de recomputação).
 11. Sem UI completa para gerenciamento das masks (toggle ON/OFF).
 12. Criativo complexo (fotografia) ainda gera inpainting imperfeito — será tratado na ETAPA 35.
+
+### ETAPA 35 — Text Inpainting
+
+**Status:** PROVIDER AUDIT COMPLETED — ADVANCED PROVIDER DEFERRED
+
+**Decisão (CHECKPOINT 35.1):** manter o inpainting determinístico atual. Auditoria de providers concluída; nenhum provider avançado foi adotado.
+
+**Current production strategy:** deterministic local inpainting (ETAPA 34).
+
+**Provider audit (concluído):**
+- **OpenCV (TELEA/NS):** NOT ADOPTED — sem vantagem clara de qualidade; ganho apenas marginal e não venceu consistentemente o algoritmo atual.
+- **LaMa/ONNX:** DEFERRED — melhoria significativa, mas requisitos de recursos excessivos para a infraestrutura atual.
+- **Paid API/GPU:** DEFERRED — não adotada neste momento.
+
+**Functional status:**
+- functional text inpainting: AVAILABLE (determinístico).
+- advanced photographic-quality inpainting: DEFERRED.
+
+**Future upgrade (documentado, NÃO implementado):** a abstração `InpaintingProvider` permanece preparada para permitir upgrade futuro sem reescrever o editor:
+
+```
+InpaintingProvider
+├── deterministic
+├── LaMa/ONNX
+└── hosted provider
+```
+
+Poderá futuramente virar recurso **Standard** (deterministic) vs **Premium** (AI high-quality inpainting) — sem implementação de planos/pagamentos agora.
+
+**Known limitations (aceitáveis no estágio atual):** fotografias complexas, texturas detalhadas, elementos gráficos atravessando texto e regiões com muitos detalhes podem apresentar reconstrução imperfeita.
+
+**Não alterado nesta execução (separado do inpainting):** font family, font color, font weight, font size, alignment, positioning e OCR noise (text layers).
+
+**Sem alteração funcional:** algoritmo determinístico, container OCR e dependências permanecem inalterados.
 
 ### CHECKPOINT 33.1 — Production Validation
 
