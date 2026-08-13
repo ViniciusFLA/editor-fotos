@@ -37,7 +37,7 @@
 **ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
 **ETAPA 34 — Text Masks** — CONCLUIDA
 **ETAPA 35 — Text Inpainting** — PROVIDER AUDIT COMPLETED — ADVANCED PROVIDER DEFERRED
-**ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED — AWAITING USER MANUAL VALIDATION
+**ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED + DEPLOYED — AWAITING USER MANUAL VALIDATION
 
 **Próxima etapa:** ETAPA 37 — Segmentation Provider
 **Última atualização:** 2026-08-13
@@ -134,7 +134,7 @@ Poderá futuramente virar recurso **Standard** (deterministic) vs **Premium** (A
 
 ### ETAPA 36 — Editable Text Pipeline
 
-**Status:** IMPLEMENTED — AWAITING USER MANUAL VALIDATION
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER MANUAL VALIDATION
 
 **Objetivo:** unificar OCR → confidence/filtering → mask → inpainting → TextElement em um pipeline transacional, previsível e resiliente, sem reinventar as peças da ETAPA 33/34 (organização, não reescrita).
 
@@ -161,6 +161,22 @@ Poderá futuramente virar recurso **Standard** (deterministic) vs **Premium** (A
 **Tests:** 19 novos (Vitest) em `src/editor/pipeline/editable-text-pipeline.test.ts` — happy path, confidence filter, geometry (polygon inválido + bbox válido; ambos inválidos), partial invalids, all filtered, mask creation, text layer creation, integração de inpainting (injetável), atomic commit (ativo e página-trocada), fatal failure antes do commit, stale result, deleted source, idempotência, múltiplos textos, mask↔layer linking. `npm test` = 45/45 PASS (26 anteriores + 19 novos); `tsc` PASS; `eslint` PASS; `next build` PASS.
 
 **NÃO implementado nesta etapa (limitações conhecidas, fora do escopo do pipeline):** font matching/recognition, color/font-weight/italic/letter-spacing extraction, text effects, advanced alignment — continuam como limitações da ETAPA 33/34.
+
+### CHECKPOINT 36.1 — Deploy For Manual Validation
+
+**Status:** DEPLOYED — AWAITING USER MANUAL UI VALIDATION
+
+**Commit (funcional):** `4b7452b` — feat: complete stage 36 editable text pipeline
+
+**Production:** https://editor-fotos-jet.vercel.app (deploy automático via push, READY)
+
+**Build:** tsc PASS, eslint PASS, vitest 45/45 PASS, next build PASS
+
+**Health:** `GET /api/ai/ocr` → `{ configured: true, provider: "paddleocr" }` (HTTP 200). OCR end-to-end (Vercel → Oracle) HTTP 200 com detecções. Afiliados HTTP 200.
+
+**Segurança:** sem secrets/tokens/credentials no diff; sem arquivos temporários ou criativos de teste commitados.
+
+**Manual UI validation:** pendente (checklist do usuário: importar criativo → Detectar texto → mover/editar CONFIRA → Undo/Redo → salvar/recarregar).
 
 ### CHECKPOINT 33.1 — Production Validation
 
