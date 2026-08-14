@@ -163,6 +163,10 @@ const ptBR: Translations = {
       detecting: 'Detectando texto...',
       detected: '{count} textos detectados',
       selectImageHint: 'Selecione uma imagem para detectar texto.',
+      convertAll: 'Converter todos',
+      editText: 'Editar texto',
+      ignore: 'Ignorar',
+      confidence: 'Confiança: {value}%',
       error: {
         requiresSingleImage: 'Selecione uma imagem.',
         imageFetchFailed: 'Não foi possível carregar a imagem.',

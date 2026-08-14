@@ -14,6 +14,12 @@ export function deepCloneElement(el: AnyElement): AnyElement {
         ...img,
         filters: { ...img.filters },
         textMasks: img.textMasks ? img.textMasks.map((m) => ({ ...m })) : undefined,
+        detectedTexts: img.detectedTexts
+          ? img.detectedTexts.map((r) => ({
+              ...r,
+              styleEstimate: r.styleEstimate ? { ...r.styleEstimate } : undefined,
+            }))
+          : undefined,
       };
     }
     case 'shape':
@@ -67,6 +73,14 @@ export function cloneElementsWithNewIds(elements: AnyElement[]): AnyElement[] {
                 id: generateId(),
                 sourceImageId: newId,
                 textLayerId: idMap.get(m.textLayerId) ?? '',
+              }))
+            : undefined,
+          detectedTexts: img.detectedTexts
+            ? img.detectedTexts.map((r) => ({
+                ...r,
+                id: generateId(),
+                sourceImageId: newId,
+                styleEstimate: r.styleEstimate ? { ...r.styleEstimate } : undefined,
               }))
             : undefined,
         };

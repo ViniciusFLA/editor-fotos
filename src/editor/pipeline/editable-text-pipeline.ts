@@ -1,5 +1,5 @@
 import type { DetectedText, OCRResult } from '@/ai/types/ocr';
-import type { ImageElement, PageData, TextElement, TextMask } from '@/types';
+import type { DetectedTextRegion, ImageElement, PageData, TextElement, TextMask } from '@/types';
 import { convertDetectedTextsToTextElements } from '@/editor/ocr/ocr-to-elements';
 import {
   buildTextMasks,
@@ -222,20 +222,36 @@ export function buildEditableTextElementsAndMasks(
 
 export type ProcessEditableTextInput = BuildEditableTextInput;
 
+export interface ProcessDetectionsResult {
+  regions: DetectedTextRegion[];
+  rejectedDetections: RejectedDetection[];
+  metrics: EditableTextPipelineMetrics;
+}
+
+function regionToDetected(region: DetectedTextRegion): DetectedText {
+  return {
+    id: region.id,
+    text: region.text,
+    confidence: region.confidence,
+    polygon: region.polygon.length >= 3 ? region.polygon : undefined,
+    boundingBox: region.boundingBox,
+  };
+}
+
 /**
- * Run the full editable-text pipeline (stages 1–7) and produce a validated
- * result ready for an atomic state commit.
+ * ETAPA 36.5 — detection only (no visual change).
  *
- * Throws `EditableTextPipelineError` before any caller-side mutation when the
- * input is empty, every detection is filtered, or inpainting fails — so the
- * caller never commits a partial state.
+ * OCR → confidence filtering → geometry validation → style estimation →
+ * stored `DetectedTextRegion[]`. Does NOT build masks, run inpainting, or
+ * create TextElements — the raster stays visually identical to the original.
  */
-export async function processOcrResult(
+export async function processDetections(
   input: ProcessEditableTextInput,
-): Promise<EditableTextPipelineResult> {
+): Promise<ProcessDetectionsResult> {
   const started = Date.now();
   const { sourceImage, ocrResult } = input;
   const config = input.config;
+  const minConfidence = config?.minConfidence ?? DEFAULT_MIN_CONFIDENCE;
 
   const detections = ocrResult.detectedTexts ?? [];
   const detectionsReceived = detections.length;
@@ -244,10 +260,9 @@ export async function processOcrResult(
     throw new EditableTextPipelineError('noTextDetected', 'No text detected');
   }
 
-  const { elements, masks, acceptedDetections, rejectedDetections } =
-    buildEditableTextElementsAndMasks(input);
+  const { accepted, rejected } = classifyDetections(detections, minConfidence);
 
-  if (elements.length === 0) {
+  if (accepted.length === 0) {
     throw new EditableTextPipelineError(
       'allDetectionsFiltered',
       'All detections were filtered out',
@@ -256,26 +271,108 @@ export async function processOcrResult(
 
   const baseSrc = sourceImage.originalSrc ?? sourceImage.src;
 
-  // Style estimation (ETAPA 36.4) — best-effort; never fails the pipeline.
-  const estimateStyles = config?.estimateStyles ?? estimateTextStyles;
+  let styles: ColorEstimate[] = [];
   try {
-    const styles = await estimateStyles(baseSrc, acceptedDetections);
-    elements.forEach((el, i) => {
-      const style = styles[i];
-      if (style && style.confidence >= MIN_COLOR_CONFIDENCE) {
-        el.fill = style.color;
-      }
-    });
+    const estimateStyles = config?.estimateStyles ?? estimateTextStyles;
+    styles = await estimateStyles(baseSrc, accepted);
   } catch {
-    // keep fallback colors
+    styles = [];
   }
 
+  const regions: DetectedTextRegion[] = accepted.map((detected, i) => {
+    const style = styles[i];
+    return {
+      id: detected.id,
+      sourceImageId: sourceImage.id,
+      text: detected.text,
+      confidence: detected.confidence ?? 1,
+      polygon: detected.polygon ?? [],
+      boundingBox: { ...detected.boundingBox },
+      styleEstimate:
+        style && style.confidence >= MIN_COLOR_CONFIDENCE
+          ? { color: style.color, colorConfidence: style.confidence }
+          : undefined,
+      status: 'detected',
+    };
+  });
+
+  return {
+    regions,
+    rejectedDetections: rejected,
+    metrics: {
+      detectionsReceived,
+      detectionsAccepted: regions.length,
+      detectionsRejected: rejected.length,
+      masksCreated: 0,
+      textLayersCreated: 0,
+      durationMs: Date.now() - started,
+    },
+  };
+}
+
+export interface ConvertDetectedRegionsInput {
+  regions: DetectedTextRegion[];
+  sourceImage: ImageElement;
+  sourcePageId: string;
+  /** First zIndex for the created layers (defaults to source image + 1). */
+  baseZIndex?: number;
+  /** Masks already applied (previously-converted regions) — merged cumulatively. */
+  existingMasks?: TextMask[];
+  config?: EditableTextPipelineConfig;
+}
+
+/**
+ * ETAPA 36.5 — convert a subset of detected regions into editable text.
+ *
+ * Reuses the ETAPA 33/34 machinery: builds masks (polygon-first → bbox
+ * fallback), runs deterministic inpainting over the CUMULATIVE masks (existing
+ * + new), and creates the TextElements positioned over the original region.
+ */
+export async function convertDetectedRegions(
+  input: ConvertDetectedRegionsInput,
+): Promise<EditableTextPipelineResult> {
+  const started = Date.now();
+  const { regions, sourceImage, sourcePageId, baseZIndex } = input;
+  const config = input.config;
+  const padding = config?.padding ?? DEFAULT_MASK_PADDING;
+
+  if (regions.length === 0) {
+    throw new EditableTextPipelineError('noTextDetected', 'No regions to convert');
+  }
+
+  const detections: DetectedText[] = regions.map(regionToDetected);
+
+  const startZ = baseZIndex ?? Math.max(0, sourceImage.zIndex) + 1;
+
+  const elements = convertDetectedTextsToTextElements({
+    result: { detectedTexts: detections },
+    sourceImage,
+    sourcePageId,
+    baseZIndex: startZ,
+    minConfidence: 0, // regions were already filtered during detection
+  });
+
+  elements.forEach((el, i) => {
+    const style = regions[i]?.styleEstimate;
+    if (style?.color) {
+      el.fill = style.color;
+    }
+  });
+
+  const { masks: newMasks } = buildTextMasks(detections, elements, sourceImage.id, {
+    minConfidence: 0,
+    padding,
+  });
+
+  const allMasks = [...(input.existingMasks ?? []), ...newMasks];
+
+  const baseSrc = sourceImage.originalSrc ?? sourceImage.src;
   const inpaint = config?.inpaint ?? applyMasksToImage;
   const maxRadius = config?.maxRadius ?? DEFAULT_MAX_RADIUS;
 
   let maskedImageSrc: string;
   try {
-    const masked = await inpaint(baseSrc, masks, { maxRadius });
+    const masked = await inpaint(baseSrc, allMasks, { maxRadius });
     maskedImageSrc = masked.src;
   } catch {
     throw new EditableTextPipelineError(
@@ -287,16 +384,54 @@ export async function processOcrResult(
   return {
     success: true,
     elements,
-    masks,
+    masks: newMasks,
     maskedImageSrc,
     originalSrc: baseSrc,
+    rejectedDetections: [],
+    metrics: {
+      detectionsReceived: regions.length,
+      detectionsAccepted: elements.length,
+      detectionsRejected: 0,
+      masksCreated: newMasks.length,
+      textLayersCreated: elements.length,
+      durationMs: Date.now() - started,
+    },
+  };
+}
+
+/**
+ * Run the full editable-text pipeline (detect + convert all) and produce a
+ * validated result ready for an atomic state commit.
+ *
+ * Backward-compatible with the ETAPA 36 behaviour; the interactive flow
+ * (CHECKPOINT 36.5) uses `processDetections` + `convertDetectedRegions`.
+ */
+export async function processOcrResult(
+  input: ProcessEditableTextInput,
+): Promise<EditableTextPipelineResult> {
+  const started = Date.now();
+
+  const { regions, rejectedDetections, metrics: detectionMetrics } =
+    await processDetections(input);
+
+  const converted = await convertDetectedRegions({
+    regions,
+    sourceImage: input.sourceImage,
+    sourcePageId: input.sourcePageId,
+    baseZIndex: input.baseZIndex,
+    existingMasks: [],
+    config: input.config,
+  });
+
+  return {
+    ...converted,
     rejectedDetections,
     metrics: {
-      detectionsReceived,
-      detectionsAccepted: elements.length,
+      detectionsReceived: detectionMetrics.detectionsReceived,
+      detectionsAccepted: converted.elements.length,
       detectionsRejected: rejectedDetections.length,
-      masksCreated: masks.length,
-      textLayersCreated: elements.length,
+      masksCreated: converted.masks.length,
+      textLayersCreated: converted.elements.length,
       durationMs: Date.now() - started,
     },
   };

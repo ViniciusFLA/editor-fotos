@@ -40,6 +40,7 @@
 **ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED + DEPLOYED + MANUALLY VALIDATED
 **ETAPA 36.3 — Clone Relationship Integrity** — CONCLUIDA
 **ETAPA 36.4 — OCR Text Style Estimation** — CONCLUIDA
+**CHECKPOINT 36.5 — Preserve Original Text Until Edit** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
 **ETAPA 37 — Segmentation Provider** — PROVIDER ABSTRACTION COMPLETED — REAL PROVIDER DEFERRED
 
 **Próxima etapa:** ETAPA 38 — Magic Select
@@ -273,6 +274,28 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 **Decisão:** NÃO instalar modelo pesado no Oracle agora (risco de OOM afetaria OCR/Afiliados). Interface pronta e testada; implementação real fica para decisão posterior.
 
 **Contract tests:** `src/ai/providers/segmentation-provider.test.ts` (5 testes) + `FakeSegmentationProvider` (`src/ai/providers/fake-segmentation-provider.ts`, exportado em `src/ai/index.ts`) — request/result/mask geometry/confidence/errors/provider failure/cancellation.
+
+### CHECKPOINT 36.5 — Preserve Original Text Until Edit
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+
+**Princípio:** "Detectar texto" NÃO altera a arte. OCR → armazena regiões detectadas (`DetectedTextRegion`) → overlay visual não destrutivo. Somente "Editar texto" (ou "Converter todos") aplica mask + inpainting + TextElement.
+
+**Data model:** `DetectedTextRegion` (id, sourceImageId, text, confidence, polygon, boundingBox, styleEstimate, status `detected|converted|rejected`) + `ImageElement.detectedTexts`.
+
+**Pipeline split (`editable-text-pipeline.ts`):** `processDetections` (detecção: classify + geometry + style, sem mask/inpaint/TextElement) e `convertDetectedRegions` (converte um subconjunto com `existingMasks` cumulativo). `processOcrResult` mantido como wrapper (detect + convert all — backward compat).
+
+**Store:** `storeDetections`, `commitRegionConversion`, `triggerConvertRegion`, `triggerConvertAll`, `selectedDetectedRegionId`.
+
+**UI:** overlay bounding boxes (Fabric Rect não destrutivo, `excludeFromExport`), clique seleciona região; AI panel mostra "N textos detectados", "Converter todos", e (com região selecionada) "Editar texto" / "Ignorar" + confiança. i18n pt-BR/en/es.
+
+**History:** detecção é leve (não-destrutiva); conversão é UMA ação lógica (pushHistoryImmediate antes do commit) — Undo restaura raster+região detectada, Redo reaplica.
+
+**Save/load/duplicate:** `detectedTexts` serializados; `cloneElementsWithNewIds` remapeia ids das regiões na duplicação de página.
+
+**Export:** regiões `detected` não alteram export; regiões `converted` exportam background inpainted + TextElement (via `src` atualizado).
+
+**Tests:** 9 novos (`detection.test.ts` + clone remap) + Playwright `ocr-detection.spec.ts` (mock OCR → raster unchanged). Total Vitest 84/84, Playwright 2/2.
 
 ### CHECKPOINT 33.1 — Production Validation
 

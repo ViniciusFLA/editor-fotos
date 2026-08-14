@@ -66,6 +66,33 @@ export const TextMaskSchema = z.object({
 
 export type TextMask = z.infer<typeof TextMaskSchema>;
 
+export const DetectedTextRegionStatusSchema = z.enum(['detected', 'converted', 'rejected']);
+
+export type DetectedTextRegionStatus = z.infer<typeof DetectedTextRegionStatusSchema>;
+
+export const DetectedTextRegionSchema = z.object({
+  id: z.string(),
+  sourceImageId: z.string(),
+  text: z.string(),
+  confidence: z.number(),
+  polygon: z.array(TextMaskPointSchema),
+  boundingBox: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  }),
+  styleEstimate: z
+    .object({
+      color: z.string().optional(),
+      colorConfidence: z.number().optional(),
+    })
+    .optional(),
+  status: DetectedTextRegionStatusSchema,
+});
+
+export type DetectedTextRegion = z.infer<typeof DetectedTextRegionSchema>;
+
 export const ImageElementSchema = BaseElementSchema.extend({
   type: z.literal('image'),
   assetId: z.string(),
@@ -81,6 +108,7 @@ export const ImageElementSchema = BaseElementSchema.extend({
   naturalHeight: z.number().optional(),
   textMasks: z.array(TextMaskSchema).optional(),
   originalSrc: z.string().optional(),
+  detectedTexts: z.array(DetectedTextRegionSchema).optional(),
 });
 
 export const ShapeTypeSchema = z.enum(['rectangle', 'circle', 'line']);
@@ -154,6 +182,8 @@ export interface ImageElement extends EditorElement {
   textMasks?: TextMask[];
   /** ETAPA 34 — the untouched original source (pre-masking). */
   originalSrc?: string;
+  /** ETAPA 36.5 — detected OCR text regions (detected but not yet converted). */
+  detectedTexts?: DetectedTextRegion[];
 }
 
 export interface ImageFilters {

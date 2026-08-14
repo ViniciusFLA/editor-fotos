@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { AnyElement, GroupElement, ImageElement, PageBackground, PageData, TextElement, TextMask } from '@/types';
+import type { AnyElement, DetectedTextRegion, GroupElement, ImageElement, PageBackground, PageData, TextElement, TextMask } from '@/types';
 import type { ShapeType } from '@/types';
 import { generateId, deepCloneElement, cloneElementsWithNewIds } from '@/utils';
 import { saveProjectData, loadProjectData, getLastProjectId } from '@/lib/persistence';
@@ -61,6 +61,10 @@ interface EditorStore {
   ocrDetectedCount: number;
   ocrError: string | null;
   triggeredOcr: number;
+  selectedDetectedRegionId: string | null;
+  triggeredConvertRegion: number;
+  pendingConvertRegionId: string | null;
+  triggeredConvertAll: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -133,6 +137,22 @@ interface EditorStore {
   setOcrSuccess: (count: number) => void;
   setOcrError: (message: string) => void;
   setOcrIdle: () => void;
+
+  setSelectedDetectedRegionId: (id: string | null) => void;
+  storeDetections: (pageId: string, imageId: string, regions: DetectedTextRegion[]) => void;
+  triggerConvertRegion: (regionId: string) => void;
+  triggerConvertAll: () => void;
+  commitRegionConversion: (
+    pageId: string,
+    imageId: string,
+    updates: {
+      maskedImageSrc: string | null;
+      masks: TextMask[];
+      elements: TextElement[];
+      originalSrc: string;
+      convertedRegionIds: string[];
+    },
+  ) => void;
 }
 
 function reorderZIndices(elements: AnyElement[], orderedIds: string[]): AnyElement[] {
@@ -247,6 +267,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
   ocrDetectedCount: 0,
   ocrError: null,
   triggeredOcr: 0,
+  selectedDetectedRegionId: null,
+  triggeredConvertRegion: 0,
+  pendingConvertRegionId: null,
+  triggeredConvertAll: 0,
 
   setElements: (elements) =>
     set((state) => ({
@@ -776,4 +800,72 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   setOcrIdle: () =>
     set({ ocrStatus: 'idle', ocrError: null, ocrDetectedCount: 0 }),
+
+  setSelectedDetectedRegionId: (id) => set({ selectedDetectedRegionId: id }),
+
+  storeDetections: (pageId, imageId, regions) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+      const apply = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (el.id !== imageId) return el;
+          const img = el as ImageElement;
+          return { ...img, detectedTexts: regions } as ImageElement;
+        });
+      return {
+        elements: isActive ? apply(state.elements) : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId ? { ...p, elements: apply(p.elements) } : p,
+        ),
+      };
+    }),
+
+  triggerConvertRegion: (regionId) =>
+    set((state) => ({
+      pendingConvertRegionId: regionId,
+      triggeredConvertRegion: state.triggeredConvertRegion + 1,
+    })),
+
+  triggerConvertAll: () =>
+    set((state) => ({ triggeredConvertAll: state.triggeredConvertAll + 1 })),
+
+  commitRegionConversion: (pageId, imageId, updates) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+
+      const apply = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (el.id !== imageId) return el;
+          const img = el as ImageElement;
+          return {
+            ...img,
+            src: updates.maskedImageSrc ?? img.src,
+            originalSrc: updates.originalSrc,
+            textMasks: updates.masks,
+            detectedTexts: img.detectedTexts?.map((r) =>
+              updates.convertedRegionIds.includes(r.id)
+                ? { ...r, status: 'converted' as const }
+                : r,
+            ),
+          } as ImageElement;
+        });
+
+      const clearedSelection = updates.convertedRegionIds.includes(
+        state.selectedDetectedRegionId ?? '',
+      );
+
+      return {
+        elements: isActive
+          ? [...apply(state.elements), ...updates.elements]
+          : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId
+            ? { ...p, elements: [...apply(p.elements), ...updates.elements] }
+            : p,
+        ),
+        selectedDetectedRegionId: clearedSelection
+          ? null
+          : state.selectedDetectedRegionId,
+      };
+    }),
 }));

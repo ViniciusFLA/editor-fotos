@@ -163,6 +163,10 @@ const en: Translations = {
       detecting: 'Detecting text...',
       detected: '{count} texts detected',
       selectImageHint: 'Select an image to detect text.',
+      convertAll: 'Convert all',
+      editText: 'Edit text',
+      ignore: 'Ignore',
+      confidence: 'Confidence: {value}%',
       error: {
         requiresSingleImage: 'Select an image.',
         imageFetchFailed: 'Could not load the image.',

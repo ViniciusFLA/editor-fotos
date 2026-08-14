@@ -141,6 +141,25 @@ describe('cloneElementsWithNewIds (ETAPA 36.3 — clone relationship integrity)'
     expect(cloned.textMasks![0]!.textLayerId).toBe('');
   });
 
+  it('remaps detectedTexts ids and sourceImageId on duplicate', () => {
+    const img = image({
+      detectedTexts: [
+        {
+          id: 'r1',
+          sourceImageId: 'img-1',
+          text: 'A',
+          confidence: 0.9,
+          polygon: [],
+          boundingBox: { x: 0, y: 0, width: 10, height: 10 },
+          status: 'detected',
+        },
+      ],
+    });
+    const cloned = cloneElementsWithNewIds([img])[0] as ImageElement;
+    expect(cloned.detectedTexts![0]!.id).not.toBe('r1');
+    expect(cloned.detectedTexts![0]!.sourceImageId).toBe(cloned.id);
+  });
+
   it('remaps ids inside groups', () => {
     const img = image({ id: 'img-inner', textMasks: [textMask({ sourceImageId: 'img-inner', textLayerId: 'text-inner' })] });
     const txt = text({ id: 'text-inner' });

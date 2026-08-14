@@ -16,7 +16,7 @@ import {
 import { useEditorStore } from '@/stores/editor-store';
 import { validateImageFile } from '@/lib/image-validation';
 import { useTranslation } from '@/i18n';
-import type { ShapeType } from '@/types';
+import type { ImageElement, ShapeType } from '@/types';
 const tabs = [
   { id: 'uploads', icon: Upload, labelKey: 'editor.sidebar.uploads' as const },
   { id: 'text', icon: Type, labelKey: 'editor.sidebar.text' as const },
@@ -48,6 +48,48 @@ export function LeftSidebar() {
   const ocrDetectedCount = useEditorStore((s) => s.ocrDetectedCount);
   const ocrError = useEditorStore((s) => s.ocrError);
   const triggerOcrDetect = useEditorStore((s) => s.triggerOcrDetect);
+  const triggerConvertAll = useEditorStore((s) => s.triggerConvertAll);
+  const triggerConvertRegion = useEditorStore((s) => s.triggerConvertRegion);
+  const selectedDetectedRegionId = useEditorStore((s) => s.selectedDetectedRegionId);
+
+  const selectedRegionInfo = useEditorStore((s) => {
+    if (!s.selectedDetectedRegionId) return null;
+    for (const el of s.elements) {
+      if (el.type === 'image') {
+        const region = (el as ImageElement).detectedTexts?.find(
+          (r) => r.id === s.selectedDetectedRegionId && r.status === 'detected',
+        );
+        if (region) return { imageId: el.id, region };
+      }
+    }
+    return null;
+  });
+
+  const hasDetectedRegions = useEditorStore((s) =>
+    s.elements.some(
+      (el) =>
+        el.type === 'image' &&
+        ((el as ImageElement).detectedTexts?.some((r) => r.status === 'detected') ?? false),
+    ),
+  );
+
+  const handleConvertRegion = useCallback(() => {
+    if (selectedDetectedRegionId) triggerConvertRegion(selectedDetectedRegionId);
+  }, [selectedDetectedRegionId, triggerConvertRegion]);
+
+  const handleIgnoreRegion = useCallback(() => {
+    if (!selectedRegionInfo) return;
+    const state = useEditorStore.getState();
+    const img = state.elements.find(
+      (el) => el.id === selectedRegionInfo.imageId,
+    ) as ImageElement | undefined;
+    if (!img?.detectedTexts) return;
+    const regions = img.detectedTexts.map((r) =>
+      r.id === selectedRegionInfo.region.id ? { ...r, status: 'rejected' as const } : r,
+    );
+    state.storeDetections(state.activePageId, img.id, regions);
+    state.setSelectedDetectedRegionId(null);
+  }, [selectedRegionInfo]);
 
   const hasSingleImageSelected =
     selectedElementIds.length === 1 &&
@@ -201,6 +243,43 @@ export function LeftSidebar() {
             <p className='mt-2 text-[10px] leading-tight text-green-600'>
               {t('editor.ai.detected').replace('{count}', String(ocrDetectedCount))}
             </p>
+          )}
+
+          {hasDetectedRegions && (
+            <button
+              onClick={() => triggerConvertAll()}
+              className='mt-2 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
+            >
+              {t('editor.ai.convertAll')}
+            </button>
+          )}
+
+          {selectedRegionInfo && (
+            <div className='mt-2 rounded border border-border bg-background p-2'>
+              <p className='text-[11px] font-medium leading-tight'>
+                {selectedRegionInfo.region.text}
+              </p>
+              <p className='mt-0.5 text-[10px] leading-tight text-muted-foreground'>
+                {t('editor.ai.confidence').replace(
+                  '{value}',
+                  String(Math.round(selectedRegionInfo.region.confidence * 100)),
+                )}
+              </p>
+              <div className='mt-1.5 flex gap-1'>
+                <button
+                  onClick={handleConvertRegion}
+                  className='flex-1 rounded bg-blue-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-blue-700 transition-colors'
+                >
+                  {t('editor.ai.editText')}
+                </button>
+                <button
+                  onClick={handleIgnoreRegion}
+                  className='flex-1 rounded bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted/80 transition-colors'
+                >
+                  {t('editor.ai.ignore')}
+                </button>
+              </div>
+            </div>
           )}
 
           {ocrStatus === 'error' && (

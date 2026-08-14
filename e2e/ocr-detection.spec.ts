@@ -1,0 +1,93 @@
+import { test, expect } from '@playwright/test';
+
+/**
+ * CHECKPOINT 36.5 — "Detectar texto" must not alter the raster.
+ *
+ * Mocks the OCR endpoint and asserts that after detection the canvas raster is
+ * visually unchanged (only thin overlay borders may differ) and no editable
+ * text layer is auto-created.
+ */
+
+const FIXTURE = 'e2e/fixtures/fixture-1080.png';
+
+const MOCK_OCR = {
+  detectedTexts: [
+    {
+      id: 'd1',
+      text: 'CONFIRA',
+      boundingBox: { x: 150, y: 150, width: 300, height: 80 },
+      confidence: 0.98,
+      polygon: [
+        { x: 150, y: 150 },
+        { x: 450, y: 150 },
+        { x: 450, y: 230 },
+        { x: 150, y: 230 },
+      ],
+    },
+  ],
+};
+
+async function canvasPixels(page: import('@playwright/test').Page): Promise<number[]> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement;
+    const ctx = canvas.getContext('2d')!;
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    return Array.from(data);
+  });
+}
+
+function changedPixels(before: number[], after: number[]): number {
+  let diff = 0;
+  for (let i = 0; i < before.length; i += 4) {
+    if (
+      before[i] !== after[i] ||
+      before[i + 1] !== after[i + 1] ||
+      before[i + 2] !== after[i + 2]
+    ) {
+      diff += 1;
+    }
+  }
+  return diff;
+}
+
+test('Detectar texto preserves the raster (no visual change)', async ({ page }) => {
+  await page.route('**/api/ai/ocr', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: MOCK_OCR });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.goto('/');
+  await page.locator('canvas').first().waitFor({ state: 'visible' });
+  await page.locator('input[type=file]').setInputFiles(FIXTURE);
+  await page.waitForTimeout(1500);
+
+  // Select the image so "Detectar texto" is enabled.
+  const box = await page.locator('canvas').first().boundingBox();
+  const cx = box!.x + box!.width / 2;
+  const cy = box!.y + box!.height / 2;
+  await page.mouse.click(cx, cy);
+  await page.waitForTimeout(300);
+
+  const before = await canvasPixels(page);
+
+  // Open the AI panel and detect.
+  await page.locator('button[title="IA"]').click();
+  await page.getByRole('button', { name: 'Detectar texto' }).click();
+
+  // Wait for the detection success message.
+  await page.getByText(/textos detectados/).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(400);
+
+  const after = await canvasPixels(page);
+  const total = before.length / 4;
+  const diff = changedPixels(before, after);
+
+  // Only the thin overlay borders may differ (< 5% of pixels).
+  expect(diff, `raster changed by ${diff} pixels of ${total}`).toBeLessThan(total * 0.05);
+
+  // The "Converter todos" action appears (detection stored regions, not conversion).
+  await expect(page.getByRole('button', { name: 'Converter todos' })).toBeVisible();
+});

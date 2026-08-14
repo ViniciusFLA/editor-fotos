@@ -161,6 +161,10 @@ export interface Translations {
       detecting: string;
       detected: string;
       selectImageHint: string;
+      convertAll: string;
+      editText: string;
+      ignore: string;
+      confidence: string;
       error: {
         requiresSingleImage: string;
         imageFetchFailed: string;

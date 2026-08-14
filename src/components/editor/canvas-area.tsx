@@ -18,13 +18,21 @@ import { downloadDataUrl, getExportFileName } from '@/lib/export-utils';
 import { ContextMenu, ICON_MAP } from '@/components/editor/context-menu';
 import { useTranslation } from '@/i18n';
 import { fetchOcrResult, OcrFlowError } from '@/editor/ocr/ocr-flow';
-import { processOcrResult, EditableTextPipelineError, isResultStale } from '@/editor/pipeline/editable-text-pipeline';
+import {
+  processDetections,
+  convertDetectedRegions,
+  EditableTextPipelineError,
+  isResultStale,
+} from '@/editor/pipeline/editable-text-pipeline';
+import { mapImageRectToCanvas } from '@/editor/ocr/ocr-to-elements';
 import { computeImageFitScale, DEFAULT_MAX_DIMENSION_RATIO } from '@/editor/core/image-fit';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
-import type { ImageElement, TextElement, ShapeElement } from '@/types';
+import type { DetectedTextRegion, ImageElement, TextElement, ShapeElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
+
+const regionOverlayMap = new WeakMap<FabricObject, string>();
 
 export function CanvasArea() {
   const { t } = useTranslation();
@@ -59,6 +67,15 @@ export function CanvasArea() {
   const exportScale = useEditorStore((s) => s.exportScale);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const triggeredOcr = useEditorStore((s) => s.triggeredOcr);
+  const triggeredConvertRegion = useEditorStore((s) => s.triggeredConvertRegion);
+  const pendingConvertRegionId = useEditorStore((s) => s.pendingConvertRegionId);
+  const triggeredConvertAll = useEditorStore((s) => s.triggeredConvertAll);
+  const detectedOverlayKey = useEditorStore((s) => {
+    const image = s.elements.find((el) => el.type === 'image');
+    const regions = (image as ImageElement | undefined)?.detectedTexts;
+    if (!regions) return '';
+    return regions.map((r) => `${r.id}:${r.status}`).join('|');
+  });
 
   const insertImage = useCallback(
     async (src: string) => {
@@ -570,6 +587,77 @@ export function CanvasArea() {
     downloadDataUrl(dataUrl, getExportFileName(exportFormat));
   }, [triggeredExport, canvasReady, exportFormat, exportScale, canvasInstanceRef]);
 
+  const overlayObjectsRef = useRef<FabricObject[]>([]);
+
+  const clearDetectedOverlays = useCallback(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+    overlayObjectsRef.current.forEach((obj) => canvas.remove(obj));
+    overlayObjectsRef.current = [];
+  }, [canvasInstanceRef]);
+
+  const renderDetectedOverlays = useCallback(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas) return;
+    clearDetectedOverlays();
+
+    const store = useEditorStore.getState();
+    const image = store.elements.find((el) => el.type === 'image') as ImageElement | undefined;
+    const regions = image?.detectedTexts?.filter((r) => r.status === 'detected') ?? [];
+    if (!image || regions.length === 0) {
+      canvas.requestRenderAll();
+      return;
+    }
+
+    for (const region of regions) {
+      const mapped = mapImageRectToCanvas(image, region.boundingBox);
+      const rect = new Rect({
+        left: mapped.x,
+        top: mapped.y,
+        width: mapped.width,
+        height: mapped.height,
+        fill: 'transparent',
+        stroke: '#3b82f6',
+        strokeWidth: 1,
+        strokeDashArray: [4, 4],
+        selectable: false,
+        evented: true,
+        excludeFromExport: true,
+        hasControls: false,
+        hasBorders: false,
+        hoverCursor: 'pointer',
+      });
+      regionOverlayMap.set(rect, region.id);
+      canvas.add(rect);
+      overlayObjectsRef.current.push(rect);
+    }
+    canvas.requestRenderAll();
+  }, [canvasInstanceRef, clearDetectedOverlays]);
+
+  useEffect(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady) return;
+
+    const handleMouseDown = (e: { target?: FabricObject }) => {
+      const target = e.target;
+      if (!target) return;
+      const regionId = regionOverlayMap.get(target);
+      if (regionId) {
+        useEditorStore.getState().setSelectedDetectedRegionId(regionId);
+      }
+    };
+
+    canvas.on('mouse:down', handleMouseDown);
+    return () => {
+      canvas.off('mouse:down', handleMouseDown);
+    };
+  }, [canvasReady, canvasInstanceRef]);
+
+  useEffect(() => {
+    if (!canvasReady) return;
+    renderDetectedOverlays();
+  }, [detectedOverlayKey, canvasReady, rebuildCanvasVersion, renderDetectedOverlays]);
+
   useEffect(() => {
     if (!canvasReady || triggeredOcr === 0) return;
 
@@ -578,71 +666,22 @@ export function CanvasArea() {
         const { result, sourceImage, sourcePageId, sourceImageId } =
           await fetchOcrResult();
 
-        // ETAPA 36 — single central pipeline (OCR → filter → mask → inpaint → TextElement).
-        const pipelineResult = await processOcrResult({
+        // CHECKPOINT 36.5 — detection only: no mask, no inpainting, no TextElement.
+        const detections = await processDetections({
           sourceImage,
           ocrResult: result,
           sourcePageId,
         });
 
-        // Re-validate context right before the atomic commit (stale-result guard).
         const state = useEditorStore.getState();
         if (isResultStale(state.pages, sourcePageId, sourceImageId)) {
           useEditorStore.getState().setOcrError('staleResult');
           return;
         }
 
-        const sourcePage = state.pages.find((p) => p.id === sourcePageId);
-        if (!sourcePage) {
-          useEditorStore.getState().setOcrError('staleResult');
-          return;
-        }
-
-        pushHistoryImmediate(sourcePageId, sourcePage.elements, sourcePage.background);
-
-        // ETAPA 36 — atomic state commit: the source image (masked src + masks +
-        // originalSrc) and the new text layers are committed in a single store
-        // update, so no partial state can be observed.
-        useEditorStore.getState().commitEditableTextResult(sourcePageId, sourceImageId, {
-          maskedImageSrc: pipelineResult.maskedImageSrc,
-          masks: pipelineResult.masks,
-          elements: pipelineResult.elements,
-          originalSrc: pipelineResult.originalSrc,
-        });
-
-        // ETAPA 34 behaviour preserved: swap the live Fabric image via setSrc
-        // (no full rebuild) and add the OCR IText layers directly on top so they
-        // stay interactive.
-        const canvas = canvasInstanceRef.current;
-        if (canvas && state.activePageId === sourcePageId) {
-          const fabricImage = findFabricObjectById(canvas, sourceImageId);
-          if (fabricImage instanceof FabricImage) {
-            try {
-              await fabricImage.setSrc(pipelineResult.maskedImageSrc);
-            } catch (err) {
-              console.warn('[OCR] failed to swap masked image src', err);
-            }
-          }
-
-          const fabricObjects = await Promise.all(
-            pipelineResult.elements.map(async (el) => {
-              const obj = createFabricObject(el);
-              return obj instanceof Promise ? await obj : obj;
-            }),
-          );
-          canvas.add(...fabricObjects);
-          if (fabricObjects.length > 0) {
-            canvas.setActiveObject(fabricObjects[0]!);
-          }
-          canvas.requestRenderAll();
-        }
-
-        console.info(
-          `[OCR] pipeline metrics: ${JSON.stringify(pipelineResult.metrics)}`,
-        );
-
+        useEditorStore.getState().storeDetections(sourcePageId, sourceImageId, detections.regions);
         useEditorStore.getState().markUnsaved();
-        useEditorStore.getState().setOcrSuccess(pipelineResult.elements.length);
+        useEditorStore.getState().setOcrSuccess(detections.regions.length);
       } catch (error) {
         const code =
           error instanceof OcrFlowError ||
@@ -655,6 +694,104 @@ export function CanvasArea() {
 
     run();
   }, [triggeredOcr, canvasReady, canvasInstanceRef]);
+
+  const convertRegionsFlow = useCallback(
+    async (regions: DetectedTextRegion[]) => {
+      if (regions.length === 0) return;
+
+      const store = useEditorStore.getState();
+      const sourcePageId = store.activePageId;
+      const image = store.elements.find(
+        (el) => el.type === 'image',
+      ) as ImageElement | undefined;
+      if (!image) return;
+
+      const baseZIndex =
+        Math.max(0, ...store.elements.map((el) => el.zIndex)) + 1;
+      const existingMasks = image.textMasks ?? [];
+
+      const result = await convertDetectedRegions({
+        regions,
+        sourceImage: image,
+        sourcePageId,
+        baseZIndex,
+        existingMasks,
+      });
+
+      const state = useEditorStore.getState();
+      if (isResultStale(state.pages, sourcePageId, image.id)) return;
+
+      const sourcePage = state.pages.find((p) => p.id === sourcePageId);
+      if (!sourcePage) return;
+
+      pushHistoryImmediate(sourcePageId, sourcePage.elements, sourcePage.background);
+
+      const convertedRegionIds = regions.map((r) => r.id);
+      useEditorStore.getState().commitRegionConversion(sourcePageId, image.id, {
+        maskedImageSrc: result.maskedImageSrc,
+        masks: [...existingMasks, ...result.masks],
+        elements: result.elements,
+        originalSrc: result.originalSrc,
+        convertedRegionIds,
+      });
+
+      const canvas = canvasInstanceRef.current;
+      if (canvas && state.activePageId === sourcePageId) {
+        const fabricImage = findFabricObjectById(canvas, image.id);
+        if (fabricImage instanceof FabricImage) {
+          try {
+            await fabricImage.setSrc(result.maskedImageSrc);
+          } catch (err) {
+            console.warn('[OCR] failed to swap masked image src', err);
+          }
+        }
+
+        const fabricObjects = await Promise.all(
+          result.elements.map(async (el) => {
+            const obj = createFabricObject(el);
+            return obj instanceof Promise ? await obj : obj;
+          }),
+        );
+        canvas.add(...fabricObjects);
+        if (fabricObjects.length > 0) {
+          canvas.setActiveObject(fabricObjects[0]!);
+        }
+        canvas.requestRenderAll();
+      }
+
+      useEditorStore.getState().markUnsaved();
+    },
+    [canvasInstanceRef],
+  );
+
+  useEffect(() => {
+    if (!canvasReady || triggeredConvertRegion === 0) return;
+    const regionId = pendingConvertRegionId;
+    if (!regionId) return;
+
+    const store = useEditorStore.getState();
+    const image = store.elements.find(
+      (el) => el.type === 'image',
+    ) as ImageElement | undefined;
+    const region = image?.detectedTexts?.find(
+      (r) => r.id === regionId && r.status === 'detected',
+    );
+    if (!region) return;
+
+    void convertRegionsFlow([region]);
+  }, [triggeredConvertRegion, pendingConvertRegionId, canvasReady, convertRegionsFlow]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredConvertAll === 0) return;
+
+    const store = useEditorStore.getState();
+    const image = store.elements.find(
+      (el) => el.type === 'image',
+    ) as ImageElement | undefined;
+    const regions = image?.detectedTexts?.filter((r) => r.status === 'detected') ?? [];
+
+    void convertRegionsFlow(regions);
+  }, [triggeredConvertAll, canvasReady, convertRegionsFlow]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const clipboardItems = useEditorStore((s) => s.clipboard);
