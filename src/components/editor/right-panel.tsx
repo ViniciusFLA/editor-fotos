@@ -64,6 +64,7 @@ export function RightPanel() {
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const elements = useEditorStore((s) => s.elements);
   const updateElement = useEditorStore((s) => s.updateElement);
+  const armedElement = useEditorStore((s) => s.armedElement);
   const cropModeElementId = useEditorStore((s) => s.cropModeElementId);
   const cropModeSnapshot = useEditorStore((s) => s.cropModeSnapshot);
   const setCropMode = useEditorStore((s) => s.setCropMode);
@@ -74,13 +75,18 @@ export function RightPanel() {
   const [loadingFont, setLoadingFont] = useState<string | null>(null);
 
   const element = useMemo<AnyElement | null>(() => {
+    if (armedElement) return armedElement;
     if (selectedElementIds.length !== 1) return null;
     return elements.find((el) => el.id === selectedElementIds[0]) ?? null;
-  }, [selectedElementIds, elements]);
+  }, [armedElement, selectedElementIds, elements]);
 
   const handleChange = useCallback(
     (updates: Partial<AnyElement>) => {
       const store = useEditorStore.getState();
+      if (store.armedElement) {
+        store.updateArmedElement(updates as Partial<TextElement>);
+        return;
+      }
       const currentId = store.selectedElementIds[0];
       if (!currentId) return;
       pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);

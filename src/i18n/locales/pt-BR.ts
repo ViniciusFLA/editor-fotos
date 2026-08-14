@@ -167,6 +167,8 @@ const ptBR: Translations = {
       editText: 'Editar texto',
       ignore: 'Ignorar',
       confidence: 'Confiança: {value}%',
+      statusConverted: 'Editável',
+      statusArmed: 'Editando',
       error: {
         requiresSingleImage: 'Selecione uma imagem.',
         imageFetchFailed: 'Não foi possível carregar a imagem.',

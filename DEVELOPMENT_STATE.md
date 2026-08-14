@@ -321,6 +321,18 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 
 **Tests:** `convertArmedRegion` (Vitest) + Playwright "Editar texto preserva o raster até a primeira edição" (raster idêntico no arm; converte após digitar). Total Vitest 85/85, Playwright 4/4.
 
+### CHECKPOINT 36.5D — Text List + Lazy Edit UX
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+
+**UX:** o painel esquerdo mostra uma **lista scrollável de todos os textos detectados** (texto + confiança + estado). Click seleciona a região (sincroniza com o overlay); double-click ou "Editar texto" entra em modo `armed`. O painel direito mostra as **propriedades normais de texto** da IText transitória (`armedElement` no store). Apenas ALTERAR um valor (conteúdo/cor/tamanho/fonte/mover/redimensionar/rotacionar) converte. Cancelar sem modificação (blur/Escape ou trocar de item) reverte para `detected`.
+
+**Arquitetura:** `armedElement: TextElement | null` + `armedRegionId` no store (elemento transitório FORA de `elements` para não disparar o reorder de z-order). `updateArmedElement` (edições do painel) e `syncItextToArmedElement` (digitação/move no canvas) mantêm o estado; o JSON watcher detecta a primeira mutação → `convertArmedElement` → `convertArmedRegion` + `commitArmedConversion` (adiciona o elemento, marca região `converted` + `textLayerId`).
+
+**Estados:** `DetectedTextRegion.status` = `detected | armed | converted | rejected`. `textLayerId` na região liga item convertido → TextElement real (FASE 20). `cloneElementsWithNewIds` remapeia `textLayerId` na duplicação. `project-serializer` normaliza `armed` → `detected` no save.
+
+**Tests:** Vitest 86/86, Playwright 4/4 (raster unchanged no detect; overlay click sem crash; Editar texto preserva raster até a primeira edição).
+
 ### CHECKPOINT 33.1 — Production Validation
 
 **Status:** DEPLOYED — AWAITING MANUAL UI VALIDATION

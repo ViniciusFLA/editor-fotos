@@ -80,6 +80,7 @@ export function cloneElementsWithNewIds(elements: AnyElement[]): AnyElement[] {
                 ...r,
                 id: generateId(),
                 sourceImageId: newId,
+                textLayerId: r.textLayerId ? (idMap.get(r.textLayerId) ?? '') : undefined,
                 styleEstimate: r.styleEstimate ? { ...r.styleEstimate } : undefined,
               }))
             : undefined,

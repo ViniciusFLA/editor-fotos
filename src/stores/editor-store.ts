@@ -65,6 +65,8 @@ interface EditorStore {
   triggeredEditRegion: number;
   pendingEditRegionId: string | null;
   triggeredConvertAll: number;
+  armedElement: TextElement | null;
+  armedRegionId: string | null;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -151,6 +153,20 @@ interface EditorStore {
       elements: TextElement[];
       originalSrc: string;
       convertedRegionIds: string[];
+    },
+  ) => void;
+  setArmedRegion: (element: TextElement, regionId: string) => void;
+  updateArmedElement: (updates: Partial<TextElement>) => void;
+  clearArmedRegion: () => void;
+  commitArmedConversion: (
+    pageId: string,
+    imageId: string,
+    updates: {
+      element: TextElement;
+      masks: TextMask[];
+      maskedImageSrc: string;
+      originalSrc: string;
+      regionId: string;
     },
   ) => void;
 }
@@ -271,6 +287,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   triggeredEditRegion: 0,
   pendingEditRegionId: null,
   triggeredConvertAll: 0,
+  armedElement: null,
+  armedRegionId: null,
 
   setElements: (elements) =>
     set((state) => ({
@@ -833,6 +851,12 @@ export const useEditorStore = create<EditorStore>((set) => ({
     set((state) => {
       const isActive = state.activePageId === pageId;
 
+      const regionToElement = new Map<string, string>();
+      updates.convertedRegionIds.forEach((rid, i) => {
+        const el = updates.elements[i];
+        if (el) regionToElement.set(rid, el.id);
+      });
+
       const apply = (els: AnyElement[]): AnyElement[] =>
         els.map((el) => {
           if (el.id !== imageId) return el;
@@ -843,8 +867,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
             originalSrc: updates.originalSrc,
             textMasks: updates.masks,
             detectedTexts: img.detectedTexts?.map((r) =>
-              updates.convertedRegionIds.includes(r.id)
-                ? { ...r, status: 'converted' as const }
+              regionToElement.has(r.id)
+                ? { ...r, status: 'converted' as const, textLayerId: regionToElement.get(r.id) }
                 : r,
             ),
           } as ImageElement;
@@ -866,6 +890,89 @@ export const useEditorStore = create<EditorStore>((set) => ({
         selectedDetectedRegionId: clearedSelection
           ? null
           : state.selectedDetectedRegionId,
+      };
+    }),
+
+  setArmedRegion: (element, regionId) =>
+    set({ armedElement: element, armedRegionId: regionId }),
+
+  updateArmedElement: (updates) =>
+    set((state) => ({
+      armedElement: state.armedElement
+        ? ({ ...state.armedElement, ...updates } as TextElement)
+        : state.armedElement,
+    })),
+
+  clearArmedRegion: () =>
+    set((state) => {
+      const armedRegionId = state.armedRegionId;
+
+      const apply = (els: AnyElement[]): AnyElement[] => {
+        if (!armedRegionId) return els;
+        return els.map((el) => {
+          if (el.type !== 'image') return el;
+          const img = el as ImageElement;
+          return {
+            ...img,
+            detectedTexts: img.detectedTexts?.map((r) =>
+              r.id === armedRegionId ? { ...r, status: 'detected' as const } : r,
+            ),
+          } as ImageElement;
+        });
+      };
+
+      return {
+        elements: apply(state.elements),
+        pages: state.pages.map((p) =>
+          p.id === state.activePageId ? { ...p, elements: apply(p.elements) } : p,
+        ),
+        armedElement: null,
+        armedRegionId: null,
+      };
+    }),
+
+  commitArmedConversion: (pageId, imageId, updates) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+
+      const apply = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (el.id === imageId) {
+            const img = el as ImageElement;
+            return {
+              ...img,
+              src: updates.maskedImageSrc,
+              originalSrc: updates.originalSrc,
+              textMasks: updates.masks,
+              detectedTexts: img.detectedTexts?.map((r) =>
+                r.id === updates.regionId
+                  ? {
+                      ...r,
+                      status: 'converted' as const,
+                      textLayerId: updates.element.id,
+                    }
+                  : r,
+              ),
+            } as ImageElement;
+          }
+          return el;
+        });
+
+      return {
+        elements: isActive
+          ? [...apply(state.elements), updates.element]
+          : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId
+            ? { ...p, elements: [...apply(p.elements), updates.element] }
+            : p,
+        ),
+        armedElement: null,
+        armedRegionId: null,
+        selectedDetectedRegionId:
+          state.selectedDetectedRegionId === updates.regionId
+            ? null
+            : state.selectedDetectedRegionId,
       };
     }),
 }));

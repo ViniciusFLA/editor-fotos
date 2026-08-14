@@ -94,6 +94,7 @@ export const DetectedTextRegionSchema = z.object({
     })
     .optional(),
   status: DetectedTextRegionStatusSchema,
+  textLayerId: z.string().optional(),
 });
 
 export type DetectedTextRegion = z.infer<typeof DetectedTextRegionSchema>;
@@ -190,7 +191,6 @@ export interface ImageElement extends EditorElement {
   /** ETAPA 36.5 — detected OCR text regions (detected but not yet converted). */
   detectedTexts?: DetectedTextRegion[];
 }
-
 export interface ImageFilters {
   brightness: number;
   contrast: number;

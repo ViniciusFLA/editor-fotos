@@ -167,6 +167,8 @@ const es: Translations = {
       editText: 'Editar texto',
       ignore: 'Ignorar',
       confidence: 'Confianza: {value}%',
+      statusConverted: 'Editable',
+      statusArmed: 'Editando',
       error: {
         requiresSingleImage: 'Selecciona una imagen.',
         imageFetchFailed: 'No se pudo cargar la imagen.',

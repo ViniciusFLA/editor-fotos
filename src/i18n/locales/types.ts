@@ -165,6 +165,8 @@ export interface Translations {
       editText: string;
       ignore: string;
       confidence: string;
+      statusConverted: string;
+      statusArmed: string;
       error: {
         requiresSingleImage: string;
         imageFetchFailed: string;

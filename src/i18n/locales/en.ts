@@ -167,6 +167,8 @@ const en: Translations = {
       editText: 'Edit text',
       ignore: 'Ignore',
       confidence: 'Confidence: {value}%',
+      statusConverted: 'Editable',
+      statusArmed: 'Editing',
       error: {
         requiresSingleImage: 'Select an image.',
         imageFetchFailed: 'Could not load the image.',

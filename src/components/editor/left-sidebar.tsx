@@ -16,7 +16,9 @@ import {
 import { useEditorStore } from '@/stores/editor-store';
 import { validateImageFile } from '@/lib/image-validation';
 import { useTranslation } from '@/i18n';
-import type { ImageElement, ShapeType } from '@/types';
+import type { DetectedTextRegion, ImageElement, ShapeType } from '@/types';
+
+const EMPTY_REGIONS: DetectedTextRegion[] = [];
 const tabs = [
   { id: 'uploads', icon: Upload, labelKey: 'editor.sidebar.uploads' as const },
   { id: 'text', icon: Type, labelKey: 'editor.sidebar.text' as const },
@@ -49,17 +51,21 @@ export function LeftSidebar() {
   const ocrError = useEditorStore((s) => s.ocrError);
   const triggerOcrDetect = useEditorStore((s) => s.triggerOcrDetect);
   const triggerConvertAll = useEditorStore((s) => s.triggerConvertAll);
-  const triggerEditRegion = useEditorStore((s) => s.triggerEditRegion);
   const selectedDetectedRegionId = useEditorStore((s) => s.selectedDetectedRegionId);
+
+  const detectedRegions = useEditorStore((s) => {
+    const image = s.elements.find((el) => el.type === 'image');
+    return (image as ImageElement | undefined)?.detectedTexts ?? EMPTY_REGIONS;
+  });
 
   const selectedRegion = useEditorStore((s) => {
     if (!s.selectedDetectedRegionId) return null;
     for (const el of s.elements) {
       if (el.type === 'image') {
         const region = (el as ImageElement).detectedTexts?.find(
-          (r) => r.id === s.selectedDetectedRegionId && r.status === 'detected',
+          (r) => r.id === s.selectedDetectedRegionId,
         );
-        // Return the region object itself (stable reference) â€” returning a new
+        // Return the region object itself (stable reference) — returning a new
         // wrapper object here would cause an infinite update loop.
         if (region) return region;
       }
@@ -71,13 +77,23 @@ export function LeftSidebar() {
     s.elements.some(
       (el) =>
         el.type === 'image' &&
-        ((el as ImageElement).detectedTexts?.some((r) => r.status === 'detected') ?? false),
+        ((el as ImageElement).detectedTexts?.some((r) => r.status !== 'rejected') ?? false),
     ),
   );
 
-  const handleConvertRegion = useCallback(() => {
-    if (selectedDetectedRegionId) triggerEditRegion(selectedDetectedRegionId);
-  }, [selectedDetectedRegionId, triggerEditRegion]);
+  const handleSelectRegion = useCallback((regionId: string) => {
+    const state = useEditorStore.getState();
+    if (state.armedElement && state.armedRegionId !== regionId) {
+      state.clearArmedRegion();
+    }
+    state.setSelectedDetectedRegionId(regionId);
+  }, []);
+
+  const handleEditRegion = useCallback((regionId: string) => {
+    const state = useEditorStore.getState();
+    state.setSelectedDetectedRegionId(regionId);
+    state.triggerEditRegion(regionId);
+  }, []);
 
   const handleIgnoreRegion = useCallback(() => {
     if (!selectedRegion) return;
@@ -250,39 +266,67 @@ export function LeftSidebar() {
           )}
 
           {hasDetectedRegions && (
-            <button
-              onClick={() => triggerConvertAll()}
-              className='mt-2 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
-            >
-              {t('editor.ai.convertAll')}
-            </button>
-          )}
-
-          {selectedRegion && (
-            <div className='mt-2 rounded border border-border bg-background p-2'>
-              <p className='text-[11px] font-medium leading-tight'>
-                {selectedRegion.text}
-              </p>
-              <p className='mt-0.5 text-[10px] leading-tight text-muted-foreground'>
-                {t('editor.ai.confidence').replace(
-                  '{value}',
-                  String(Math.round(selectedRegion.confidence * 100)),
-                )}
-              </p>
-              <div className='mt-1.5 flex gap-1'>
-                <button
-                  onClick={handleConvertRegion}
-                  className='flex-1 rounded bg-blue-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-blue-700 transition-colors'
-                >
-                  {t('editor.ai.editText')}
-                </button>
-                <button
-                  onClick={handleIgnoreRegion}
-                  className='flex-1 rounded bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted/80 transition-colors'
-                >
-                  {t('editor.ai.ignore')}
-                </button>
+            <div className='mt-2 flex flex-col gap-1'>
+              <div className='max-h-56 overflow-y-auto flex flex-col gap-0.5'>
+                {detectedRegions
+                  .filter((r) => r.status !== 'rejected')
+                  .map((region) => {
+                    const isSelected = region.id === selectedDetectedRegionId;
+                    return (
+                      <button
+                        key={region.id}
+                        onClick={() => handleSelectRegion(region.id)}
+                        onDoubleClick={() => {
+                          if (region.status !== 'converted') handleEditRegion(region.id);
+                        }}
+                        className={`flex items-center justify-between gap-2 rounded px-2 py-1 text-left text-[11px] transition-colors ${
+                          isSelected
+                            ? 'bg-blue-50 text-blue-700'
+                            : 'hover:bg-muted text-foreground'
+                        }`}
+                      >
+                        <span className='truncate flex-1'>{region.text}</span>
+                        <span className='text-[9px] text-muted-foreground shrink-0'>
+                          {Math.round(region.confidence * 100)}%
+                        </span>
+                        {region.status === 'converted' && (
+                          <span className='text-[9px] text-green-600 shrink-0'>
+                            {t('editor.ai.statusConverted')}
+                          </span>
+                        )}
+                        {region.status === 'armed' && (
+                          <span className='text-[9px] text-amber-600 shrink-0'>
+                            {t('editor.ai.statusArmed')}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
               </div>
+
+              <button
+                onClick={() => triggerConvertAll()}
+                className='mt-1 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
+              >
+                {t('editor.ai.convertAll')}
+              </button>
+
+              {selectedRegion && selectedRegion.status !== 'converted' && (
+                <div className='mt-1 flex gap-1'>
+                  <button
+                    onClick={() => handleEditRegion(selectedRegion.id)}
+                    className='flex-1 rounded bg-blue-600 px-2 py-1 text-[10px] font-medium text-white hover:bg-blue-700 transition-colors'
+                  >
+                    {t('editor.ai.editText')}
+                  </button>
+                  <button
+                    onClick={handleIgnoreRegion}
+                    className='flex-1 rounded bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground hover:bg-muted/80 transition-colors'
+                  >
+                    {t('editor.ai.ignore')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

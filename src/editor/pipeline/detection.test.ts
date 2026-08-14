@@ -317,6 +317,51 @@ describe('store: detection does not alter image (CHECKPOINT 36.5)', () => {
     const updated = useEditorStore.getState().elements.find((e) => e.id === 'img-1') as ImageElement;
     expect(updated.src).toBe('data:image/png;base64,MASKED');
     expect(updated.detectedTexts!.find((r) => r.id === 'r1')!.status).toBe('converted');
+    expect(updated.detectedTexts!.find((r) => r.id === 'r1')!.textLayerId).toBe('text-new');
     expect(updated.detectedTexts!.find((r) => r.id === 'r2')!.status).toBe('detected');
+  });
+
+  it('commitArmedConversion adds the element and links the region (CHECKPOINT 36.5D)', () => {
+    const img = sourceImage({
+      id: 'img-1',
+      detectedTexts: [
+        { id: 'r1', sourceImageId: 'img-1', text: 'CONFIRA', confidence: 0.9, polygon: [], boundingBox: { x: 0, y: 0, width: 10, height: 10 }, status: 'armed' },
+      ],
+    });
+    useEditorStore.setState({
+      pages: [{ id: 'p1', name: 'p1', pageNumber: 1, width: 1080, height: 1080, background: { type: 'color', color: '#fff', src: '', assetId: '', gradientStops: [], direction: 0 }, elements: [img] }],
+      activePageId: 'p1',
+      elements: [img],
+      armedElement: {
+        id: 'armed-id', type: 'text', name: 'Text', x: 0, y: 0, width: 100, height: 30, scaleX: 1, scaleY: 1, rotation: 0, opacity: 0, visible: true, locked: false, zIndex: 5,
+        text: '150%', fontFamily: 'Arial', fontSize: 20, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', fill: '#000', letterSpacing: 0, lineHeight: 1.2,
+      },
+      armedRegionId: 'r1',
+    });
+
+    const element: TextElement = {
+      id: 'armed-id', type: 'text', name: 'Text', x: 0, y: 0, width: 100, height: 30, scaleX: 1, scaleY: 1, rotation: 0, opacity: 1, visible: true, locked: false, zIndex: 5,
+      text: '150%', fontFamily: 'Arial', fontSize: 20, fontWeight: 'normal', fontStyle: 'normal', textAlign: 'left', fill: '#000', letterSpacing: 0, lineHeight: 1.2,
+    };
+    const mask: TextMask = {
+      id: 'm1', sourceImageId: 'img-1', textLayerId: 'armed-id',
+      polygon: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }, { x: 0, y: 10 }],
+      boundingBox: { x: 0, y: 0, width: 10, height: 10 }, padding: 3, enabled: true,
+    };
+
+    useEditorStore.getState().commitArmedConversion('p1', 'img-1', {
+      element,
+      masks: [mask],
+      maskedImageSrc: 'data:image/png;base64,MASKED',
+      originalSrc: 'data:image/png;base64,ORIG',
+      regionId: 'r1',
+    });
+
+    const state = useEditorStore.getState();
+    const updated = state.elements.find((e) => e.id === 'img-1') as ImageElement;
+    expect(state.elements.find((e) => e.id === 'armed-id')?.type).toBe('text');
+    expect(updated.detectedTexts!.find((r) => r.id === 'r1')!.status).toBe('converted');
+    expect(updated.detectedTexts!.find((r) => r.id === 'r1')!.textLayerId).toBe('armed-id');
+    expect(state.armedElement).toBeNull();
   });
 });
