@@ -28,33 +28,72 @@ export function deepCloneElement(el: AnyElement): AnyElement {
   }
 }
 
-export function deepCloneElementWithNewIds(el: AnyElement): AnyElement {
-  const newId = generateId();
+/**
+ * Clone a set of elements with brand-new ids, remapping every internal
+ * relationship (ETAPA 36.3 — clone relationship integrity).
+ *
+ * `ImageElement.textMasks` reference `sourceImageId` and `textLayerId`. When a
+ * whole set (e.g. a page) is duplicated, each reference must be remapped to the
+ * new ids. When a referenced element is NOT part of the set (e.g. duplicating a
+ * single OCR image without its text layer), the dangling `textLayerId` is
+ * cleared to `''` so no cross-element references are created.
+ */
+export function cloneElementsWithNewIds(elements: AnyElement[]): AnyElement[] {
+  const idMap = new Map<string, string>();
 
-  switch (el.type) {
-    case 'text':
-      return { ...el, id: newId };
-    case 'image': {
-      const img = el as ImageElement;
-      return {
-        ...img,
-        id: newId,
-        assetId: generateId(),
-        filters: { ...img.filters },
-        textMasks: img.textMasks
-          ? img.textMasks.map((m) => ({ ...m, sourceImageId: newId }))
-          : undefined,
-      };
+  const collectIds = (el: AnyElement): void => {
+    idMap.set(el.id, generateId());
+    if (el.type === 'group') {
+      (el as GroupElement).childElements.forEach(collectIds);
     }
-    case 'shape':
-      return { ...el, id: newId };
-    case 'group': {
-      const group = el as GroupElement;
-      return {
-        ...group,
-        id: newId,
-        childElements: group.childElements.map((child) => deepCloneElementWithNewIds(child)),
-      };
+  };
+  elements.forEach(collectIds);
+
+  const clone = (el: AnyElement): AnyElement => {
+    const newId = idMap.get(el.id)!;
+    switch (el.type) {
+      case 'text':
+        return { ...el, id: newId };
+      case 'image': {
+        const img = el as ImageElement;
+        return {
+          ...img,
+          id: newId,
+          assetId: generateId(),
+          filters: { ...img.filters },
+          textMasks: img.textMasks
+            ? img.textMasks.map((m) => ({
+                ...m,
+                id: generateId(),
+                sourceImageId: newId,
+                textLayerId: idMap.get(m.textLayerId) ?? '',
+              }))
+            : undefined,
+        };
+      }
+      case 'shape':
+        return { ...el, id: newId };
+      case 'group': {
+        const group = el as GroupElement;
+        return {
+          ...group,
+          id: newId,
+          childElements: group.childElements.map(clone),
+        };
+      }
     }
-  }
+  };
+
+  return elements.map(clone);
+}
+
+/**
+ * Clone a single element with a new id.
+ *
+ * Delegates to `cloneElementsWithNewIds` so that an image cloned without its
+ * linked text layer gets a cleared (orphaned) `textLayerId` instead of a
+ * dangling reference to an element that was not cloned.
+ */
+export function deepCloneElementWithNewIds(el: AnyElement): AnyElement {
+  return cloneElementsWithNewIds([el])[0]!;
 }

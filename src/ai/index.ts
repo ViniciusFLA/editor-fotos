@@ -47,5 +47,8 @@ export { GoogleOCRProvider } from './providers/google-ocr-provider';
 export { FakeOCRProvider } from './providers/fake-ocr-provider';
 export { PaddleOCRProvider } from './providers/paddle-ocr-provider';
 
+// Concrete segmentation providers
+export { FakeSegmentationProvider } from './providers/fake-segmentation-provider';
+
 // OCR normalizers
 export { normalizeGoogleOCRResponse } from './normalizers/ocr-normalizer';

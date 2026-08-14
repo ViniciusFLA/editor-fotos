@@ -37,9 +37,12 @@
 **ETAPA 33 — OCR → Editable Text Layers** — CONCLUIDA
 **ETAPA 34 — Text Masks** — CONCLUIDA
 **ETAPA 35 — Text Inpainting** — PROVIDER AUDIT COMPLETED — ADVANCED PROVIDER DEFERRED
-**ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED + DEPLOYED — AWAITING USER MANUAL VALIDATION
+**ETAPA 36 — Editable Text Pipeline** — IMPLEMENTED + DEPLOYED + MANUALLY VALIDATED
+**ETAPA 36.3 — Clone Relationship Integrity** — CONCLUIDA
+**ETAPA 36.4 — OCR Text Style Estimation** — CONCLUIDA
+**ETAPA 37 — Segmentation Provider** — PROVIDER ABSTRACTION COMPLETED — REAL PROVIDER DEFERRED
 
-**Próxima etapa:** ETAPA 37 — Segmentation Provider
+**Próxima etapa:** ETAPA 38 — Magic Select
 **Última atualização:** 2026-08-13
 
 ### ETAPA 33 — OCR → Editable Text Layers
@@ -177,6 +180,99 @@ Poderá futuramente virar recurso **Standard** (deterministic) vs **Premium** (A
 **Segurança:** sem secrets/tokens/credentials no diff; sem arquivos temporários ou criativos de teste commitados.
 
 **Manual UI validation:** pendente (checklist do usuário: importar criativo → Detectar texto → mover/editar CONFIRA → Undo/Redo → salvar/recarregar).
+
+### CHECKPOINT 36.2D — Position-Dependent Image Click Fix
+
+**Status:** ROOT CAUSE CONFIRMED + FIXED
+
+**Root cause:** `normalizeFabricObject` (`src/editor/core/element-factory.ts`) aplicava `width = width * scaleX; height = height * scaleY; scaleX = scaleY = 1` também em `FabricImage`. Para FabricImage, `width`/`height` são dimensões SOURCE/CROP do raster (não de exibição), então o bake de scale CROPPAVA o raster mantendo o mesmo bounding box. Um "clique" com jitter de 1–2px era interpretado como transform (move/resize) → `object:modified` → crop. Por isso o bug era dependente da coordenada do clique.
+
+**Fix:** `if (fabricObject instanceof FabricImage) return;` — FabricImage não passa mais por essa normalização (preserva source width/height + scaleX/scaleY + cropX/cropY).
+
+**Teste:** Playwright multi-position (`e2e/image-geometry.spec.ts`) — comprovadamente falha sem o fix e passa com o fix.
+
+### CHECKPOINT 36.2E — FabricImage Fix Deploy
+
+**Status:** DEPLOYED
+
+**Commit:** `fad4815` — fix: preserve FabricImage source dimensions on transform
+
+**Production:** https://editor-fotos-jet.vercel.app (vercel --prod explícito, READY, ETag renovado)
+
+### CHECKPOINT 36.2F — Image Geometry Fix Finalized
+
+**Status:** MANUAL PRODUCTION VALIDATION PASS
+
+**Production commit:** `fad4815`
+
+**Resultados confirmados em produção:**
+- repeated click stability: PASS
+- FabricImage source dimensions preserved: PASS
+- move: PASS
+- resize: PASS
+- rotation: PASS
+- crop: PASS
+- raster corruption: FIXED
+
+### ETAPA 36.3 — Clone Relationship Integrity
+
+**Status:** CONCLUIDA
+
+**Problema:** `deepCloneElementWithNewIds` remapeava `mask.sourceImageId` mas não `mask.textLayerId` — duplicar página/imagem OCR criava referências cruzadas para elementos originais.
+
+**Fix:** `cloneElementsWithNewIds(elements)` em `src/utils/index.ts` — constrói um mapa `oldId → newId` completo (incluindo filhos de grupos) e remapeia `sourceImageId` + `textLayerId`. `deepCloneElementWithNewIds` virou wrapper (`cloneElementsWithNewIds([el])[0]`), então duplicar uma imagem isolada **limpa** o `textLayerId` (`''`) em vez de criar referência pendente (estratégia B). `duplicatePage` agora usa `cloneElementsWithNewIds`.
+
+**Delete isolation:** deletar text-B na página duplicada afeta somente mask-B; a página original (image-A/mask-A/text-A) permanece intacta.
+
+**Tests:** 6 novos (`src/utils/clone.test.ts`) — regeneração de IDs, remap de sourceImageId/textLayerId, ausência de referências à página original, texto duplicado isolado, página original intacta, grupos.
+
+### ETAPA 36.4 — OCR Text Style Estimation
+
+**Status:** CONCLUIDA (estimação de COR — prioridade 1)
+
+**Arquitetura:** `src/editor/ocr/text-style.ts` — `estimateTextColor(imageData, bbox)` pura (determinística, DOM-free) + `estimateTextStyles(src, detections)` async. Integrada ao pipeline via `config.estimateStyles` (default = local); falha nunca derruba o pipeline (fallback).
+
+**Estratégia de cor:** estima background pelo anel de borda do bbox (histograma quantizado), detecta pixels internos com contraste (>100) contra o background (glyph), retorna a cor dominante dos glyphs com confidence (dominância × cobertura). `MIN_COLOR_CONFIDENCE = 0.6`; abaixo disso → `DEFAULT_TEXT_COLOR = '#000000'`.
+
+**Fallback conservador:** sem contraste/cluster → cor default (nunca cor absurda).
+
+**Font size:** mantida a aproximação existente (`deriveFontSize`). **Position:** preservada (`mapImageRectToCanvas`). **Alignment:** mantém fallback ('left'). **Font family:** não implementado (fora do escopo).
+
+**Tests:** 8 novos (`src/editor/ocr/text-style.test.ts`) — white-on-black, black-on-white, yellow-on-blue, red-on-white, blue-on-white, gradient, low-confidence fallback, região degenerada.
+
+### PARTE 4 — Advanced Inpainting (DEFERRED)
+
+LaMa, ONNX LaMa, GPU e paid hosted inpainting API: **DEFERRED**. Motivo: custo, latência, RAM, complexidade, infraestrutura. Inpainting atual: **DETERMINISTIC**. A abstração `InpaintingProvider` permanece preparada para provider futuro.
+
+### PARTE 5 — Detection Review UI (DEFERRED TO ETAPA 45)
+
+Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, produtos, botões, objetos) antes de desmontar o criativo: **DEFERRED TO ETAPA 45 — Desmontar Criativo**.
+
+### CHECKPOINT D — Final Editable Text Pipeline Validation
+
+**Status:** PASSED — DECISION A (EDITABLE TEXT PIPELINE STABLE)
+
+**Validado (automático):** tsc, eslint, vitest (75/75), playwright (1/1), next build — todos PASS.
+
+**Regressões verificadas:** FabricImage raster corruption (FIXED), z-order bug (preservado), OCR hit-test bug (preservado), workspace scale bug (FIXED), clone relationship (FIXED).
+
+**Criativos reais:** validação manual multi-criativo do usuário (sólido, gradiente, fotografia, múltiplas cores, textos pequenos/grandes, página duplicada) — pendente de execução manual em produção após deploy.
+
+### ETAPA 37 — Segmentation Provider
+
+**Status:** PROVIDER ABSTRACTION COMPLETED — REAL PROVIDER DEFERRED
+
+**Auditoria:** os tipos (`src/ai/types/segmentation.ts`) e a interface (`src/ai/providers/segmentation-provider.ts`) já existiam desde a ETAPA 31. O editor conhece apenas `SegmentationProvider` (sem dependência de SAM/SAM2/ONNX/Replicate/Roboflow).
+
+**Provider evaluation (decisão):**
+- SAM/SAM2: modelo pesado (ViT-H ~2.4GB), exige GPU/alta RAM — **não compatível** com Oracle A1 (aarch64, RAM limitada que também hospeda OCR + Afiliados).
+- MobileSAM: leve (~40MB), CPU viável — **candidato** para etapa futura, mas não instalado agora.
+- FastSAM: leve, qualidade inferior para objetos pequenos.
+- Hosted API (Replicate/Roboflow): custo recorrente + latência — **deferido** (mesma decisão do inpainting).
+
+**Decisão:** NÃO instalar modelo pesado no Oracle agora (risco de OOM afetaria OCR/Afiliados). Interface pronta e testada; implementação real fica para decisão posterior.
+
+**Contract tests:** `src/ai/providers/segmentation-provider.test.ts` (5 testes) + `FakeSegmentationProvider` (`src/ai/providers/fake-segmentation-provider.ts`, exportado em `src/ai/index.ts`) — request/result/mask geometry/confidence/errors/provider failure/cancellation.
 
 ### CHECKPOINT 33.1 — Production Validation
 

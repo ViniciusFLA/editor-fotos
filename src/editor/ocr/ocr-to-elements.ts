@@ -2,6 +2,7 @@ import type { DetectedText, OCRResult } from '@/ai/types/ocr';
 import type { ImageElement, TextElement } from '@/types';
 import { generateId } from '@/utils';
 import { shouldKeepDetectedText, DEFAULT_MIN_CONFIDENCE } from '@/editor/masks/text-mask';
+import { DEFAULT_TEXT_COLOR } from '@/editor/ocr/text-style';
 
 /**
  * ETAPA 33 — OCR → Editable Text Layers (application layer).
@@ -16,7 +17,6 @@ import { shouldKeepDetectedText, DEFAULT_MIN_CONFIDENCE } from '@/editor/masks/t
  */
 
 const DEFAULT_FONT_FAMILY = 'Arial';
-const DEFAULT_COLOR = '#000000';
 const DEFAULT_LINE_HEIGHT = 1.2;
 const FONT_SIZE_HEIGHT_RATIO = 0.8;
 const MAX_LAYER_NAME_LENGTH = 40;
@@ -261,7 +261,7 @@ export function convertDetectedTextsToTextElements(
       fontWeight: 'normal',
       fontStyle: 'normal',
       textAlign: detected.approximateAlignment ?? 'left',
-      fill: detected.approximateColor ?? DEFAULT_COLOR,
+      fill: detected.approximateColor ?? DEFAULT_TEXT_COLOR,
       letterSpacing: 0,
       lineHeight: DEFAULT_LINE_HEIGHT,
     };

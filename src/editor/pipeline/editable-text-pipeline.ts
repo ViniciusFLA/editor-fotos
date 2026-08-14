@@ -12,6 +12,11 @@ import {
   type InpaintOptions,
   type ApplyMasksResult,
 } from '@/editor/masks/inpaint';
+import {
+  estimateTextStyles,
+  MIN_COLOR_CONFIDENCE,
+  type ColorEstimate,
+} from '@/editor/ocr/text-style';
 
 /**
  * ETAPA 36 — Editable Text Pipeline.
@@ -71,6 +76,8 @@ export interface EditableTextPipelineConfig {
   maxRadius?: number;
   /** Inpainting provider (defaults to the deterministic local strategy). */
   inpaint?: InpaintFn;
+  /** Text color estimator (defaults to the local `estimateTextStyles`). */
+  estimateStyles?: (src: string, detections: DetectedText[]) => Promise<ColorEstimate[]>;
 }
 
 export interface EditableTextPipelineMetrics {
@@ -237,7 +244,8 @@ export async function processOcrResult(
     throw new EditableTextPipelineError('noTextDetected', 'No text detected');
   }
 
-  const { elements, masks, rejectedDetections } = buildEditableTextElementsAndMasks(input);
+  const { elements, masks, acceptedDetections, rejectedDetections } =
+    buildEditableTextElementsAndMasks(input);
 
   if (elements.length === 0) {
     throw new EditableTextPipelineError(
@@ -247,6 +255,21 @@ export async function processOcrResult(
   }
 
   const baseSrc = sourceImage.originalSrc ?? sourceImage.src;
+
+  // Style estimation (ETAPA 36.4) — best-effort; never fails the pipeline.
+  const estimateStyles = config?.estimateStyles ?? estimateTextStyles;
+  try {
+    const styles = await estimateStyles(baseSrc, acceptedDetections);
+    elements.forEach((el, i) => {
+      const style = styles[i];
+      if (style && style.confidence >= MIN_COLOR_CONFIDENCE) {
+        el.fill = style.color;
+      }
+    });
+  } catch {
+    // keep fallback colors
+  }
+
   const inpaint = config?.inpaint ?? applyMasksToImage;
   const maxRadius = config?.maxRadius ?? DEFAULT_MAX_RADIUS;
 

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AnyElement, GroupElement, ImageElement, PageBackground, PageData, TextElement, TextMask } from '@/types';
 import type { ShapeType } from '@/types';
-import { generateId, deepCloneElement, deepCloneElementWithNewIds } from '@/utils';
+import { generateId, deepCloneElement, cloneElementsWithNewIds } from '@/utils';
 import { saveProjectData, loadProjectData, getLastProjectId } from '@/lib/persistence';
 import { serializeProject } from '@/lib/project-serializer';
 import { clearHistory } from '@/editor/history/history-manager';
@@ -603,7 +603,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
         id: generateId(),
         name: `${source.name} copy`,
         pageNumber: state.nextPageNumber,
-        elements: source.elements.map((el) => deepCloneElementWithNewIds(el)),
+        elements: cloneElementsWithNewIds(source.elements),
       };
 
       const insertAt = updatedSourcePages.findIndex((p) => p.id === id) + 1;
