@@ -62,8 +62,8 @@ interface EditorStore {
   ocrError: string | null;
   triggeredOcr: number;
   selectedDetectedRegionId: string | null;
-  triggeredConvertRegion: number;
-  pendingConvertRegionId: string | null;
+  triggeredEditRegion: number;
+  pendingEditRegionId: string | null;
   triggeredConvertAll: number;
 
   setElements: (elements: AnyElement[]) => void;
@@ -140,7 +140,7 @@ interface EditorStore {
 
   setSelectedDetectedRegionId: (id: string | null) => void;
   storeDetections: (pageId: string, imageId: string, regions: DetectedTextRegion[]) => void;
-  triggerConvertRegion: (regionId: string) => void;
+  triggerEditRegion: (regionId: string) => void;
   triggerConvertAll: () => void;
   commitRegionConversion: (
     pageId: string,
@@ -268,8 +268,8 @@ export const useEditorStore = create<EditorStore>((set) => ({
   ocrError: null,
   triggeredOcr: 0,
   selectedDetectedRegionId: null,
-  triggeredConvertRegion: 0,
-  pendingConvertRegionId: null,
+  triggeredEditRegion: 0,
+  pendingEditRegionId: null,
   triggeredConvertAll: 0,
 
   setElements: (elements) =>
@@ -820,10 +820,10 @@ export const useEditorStore = create<EditorStore>((set) => ({
       };
     }),
 
-  triggerConvertRegion: (regionId) =>
+  triggerEditRegion: (regionId) =>
     set((state) => ({
-      pendingConvertRegionId: regionId,
-      triggeredConvertRegion: state.triggeredConvertRegion + 1,
+      pendingEditRegionId: regionId,
+      triggeredEditRegion: state.triggeredEditRegion + 1,
     })),
 
   triggerConvertAll: () =>

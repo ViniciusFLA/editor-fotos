@@ -437,6 +437,58 @@ export async function processOcrResult(
   };
 }
 
+export interface ConvertArmedRegionInput {
+  region: DetectedTextRegion;
+  sourceImage: ImageElement;
+  /** The final text element (already has its id; its mask links to it). */
+  element: TextElement;
+  existingMasks?: TextMask[];
+  config?: EditableTextPipelineConfig;
+}
+
+export interface ConvertArmedRegionResult {
+  element: TextElement;
+  masks: TextMask[];
+  maskedImageSrc: string;
+  originalSrc: string;
+}
+
+/**
+ * ETAPA 36.5C — convert a single armed region using the caller-provided
+ * element state (preserving the user's first modification) instead of the
+ * default detected-text element.
+ */
+export async function convertArmedRegion(
+  input: ConvertArmedRegionInput,
+): Promise<ConvertArmedRegionResult> {
+  const { region, sourceImage, element, config } = input;
+  const padding = config?.padding ?? DEFAULT_MASK_PADDING;
+
+  const { masks: newMasks } = buildTextMasks([regionToDetected(region)], [element], sourceImage.id, {
+    minConfidence: 0,
+    padding,
+  });
+
+  const allMasks = [...(input.existingMasks ?? []), ...newMasks];
+
+  const baseSrc = sourceImage.originalSrc ?? sourceImage.src;
+  const inpaint = config?.inpaint ?? applyMasksToImage;
+  const maxRadius = config?.maxRadius ?? DEFAULT_MAX_RADIUS;
+
+  let maskedImageSrc: string;
+  try {
+    const masked = await inpaint(baseSrc, allMasks, { maxRadius });
+    maskedImageSrc = masked.src;
+  } catch {
+    throw new EditableTextPipelineError(
+      'inpaintingFailed',
+      'Failed to reconstruct the background',
+    );
+  }
+
+  return { element, masks: newMasks, maskedImageSrc, originalSrc: baseSrc };
+}
+
 /**
  * Idempotency signal: an image is considered already processed once it has a
  * preserved `originalSrc` (ETAPA 34 sets it only after a first successful run).

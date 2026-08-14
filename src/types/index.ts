@@ -66,7 +66,12 @@ export const TextMaskSchema = z.object({
 
 export type TextMask = z.infer<typeof TextMaskSchema>;
 
-export const DetectedTextRegionStatusSchema = z.enum(['detected', 'converted', 'rejected']);
+export const DetectedTextRegionStatusSchema = z.enum([
+  'detected',
+  'armed',
+  'converted',
+  'rejected',
+]);
 
 export type DetectedTextRegionStatus = z.infer<typeof DetectedTextRegionStatusSchema>;
 

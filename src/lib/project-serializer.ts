@@ -44,7 +44,11 @@ async function serializeElement(el: AnyElement): Promise<AnyElement> {
     if (originalSrc && originalSrc.startsWith('blob:')) {
       originalSrc = await blobUrlToDataUrl(originalSrc);
     }
-    return { ...img, src, originalSrc };
+    // CHECKPOINT 36.5C — transient 'armed' regions persist as 'detected'.
+    const detectedTexts = img.detectedTexts?.map((r) =>
+      r.status === 'armed' ? { ...r, status: 'detected' as const } : r,
+    );
+    return { ...img, src, originalSrc, detectedTexts };
   }
 
   if (el.type === 'group') {

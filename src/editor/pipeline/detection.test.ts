@@ -4,6 +4,7 @@ import type { ImageElement, TextElement, TextMask } from '@/types';
 import {
   processDetections,
   convertDetectedRegions,
+  convertArmedRegion,
   type InpaintFn,
 } from './editable-text-pipeline';
 import type { ColorEstimate } from '@/editor/ocr/text-style';
@@ -196,6 +197,56 @@ describe('convertDetectedRegions (CHECKPOINT 36.5)', () => {
     expect(result.elements).toHaveLength(2);
     expect(result.masks).toHaveLength(2);
     expect(result.masks.map((m) => m.textLayerId)).toEqual(result.elements.map((e) => e.id));
+  });
+
+  it('convertArmedRegion uses the caller element and links its mask (CHECKPOINT 36.5C)', async () => {
+    const detections = await processDetections({
+      sourceImage: sourceImage(),
+      ocrResult: { detectedTexts: [detection()] },
+      sourcePageId: 'p1',
+      config: { estimateStyles: mockStyles },
+    });
+
+    const element: TextElement = {
+      id: 'armed-element-id',
+      type: 'text',
+      name: 'Text',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 40,
+      scaleX: 1,
+      scaleY: 1,
+      rotation: 0,
+      opacity: 1,
+      visible: true,
+      locked: false,
+      zIndex: 5,
+      text: '150%',
+      fontFamily: 'Arial',
+      fontSize: 30,
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      textAlign: 'left',
+      fill: '#ffcc00',
+      letterSpacing: 0,
+      lineHeight: 1.2,
+    };
+
+    const result = await convertArmedRegion({
+      region: detections.regions[0]!,
+      sourceImage: sourceImage(),
+      element,
+      existingMasks: [],
+      config: { inpaint: mockInpaint },
+    });
+
+    expect(result.element.id).toBe('armed-element-id');
+    expect(result.element.text).toBe('150%');
+    expect(result.masks).toHaveLength(1);
+    expect(result.masks[0]!.textLayerId).toBe('armed-element-id');
+    expect(result.maskedImageSrc).toBe('data:image/png;base64,MASKED');
+    expect(result.originalSrc).toBe('data:image/png;base64,ORIG');
   });
 });
 

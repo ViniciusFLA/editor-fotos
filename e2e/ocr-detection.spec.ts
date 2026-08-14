@@ -139,3 +139,63 @@ test('clicking a detected region selects it without crashing', async ({ page }) 
   expect(after.length).toBeGreaterThan(0);
 });
 
+test('Editar texto preserves the raster until the first real edit', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  await page.route('**/api/ai/ocr', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: MOCK_OCR });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.goto('/');
+  await page.locator('canvas').first().waitFor({ state: 'visible' });
+  await page.locator('input[type=file]').setInputFiles(FIXTURE);
+  await page.waitForTimeout(1500);
+
+  const box = await page.locator('canvas').first().boundingBox();
+  const cx = box!.x + box!.width / 2;
+  const cy = box!.y + box!.height / 2;
+  await page.mouse.click(cx, cy);
+  await page.waitForTimeout(300);
+
+  await page.locator('button[title="IA"]').click();
+  await page.getByRole('button', { name: 'Detectar texto' }).click();
+  await page.getByText(/textos detectados/).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(400);
+
+  // Select the detected region.
+  const scale = box!.width / 1080;
+  await page.mouse.click(box!.x + 372 * scale, box!.y + 295 * scale);
+  await page.waitForTimeout(400);
+  await expect(page.getByRole('button', { name: 'Editar texto' })).toBeVisible();
+
+  const before = await canvasPixels(page);
+
+  // Arm for edit (opacity-0 IText) — raster must stay visually identical.
+  await page.getByRole('button', { name: 'Editar texto' }).click();
+  await page.waitForTimeout(700);
+
+  const armed = await canvasPixels(page);
+  const armedDiff = changedPixels(before, armed);
+  const total = before.length / 4;
+  expect(armedDiff, `raster changed on arm by ${armedDiff}/${total}`).toBeLessThan(total * 0.05);
+  expect(pageErrors, `page crashed: ${pageErrors.join('; ')}`).toEqual([]);
+
+  // First real modification (type) triggers conversion.
+  await page.keyboard.press('Control+a');
+  await page.keyboard.type('150%', { delay: 30 });
+  await page.mouse.click(box!.x + 30, box!.y + 30);
+  await page.waitForTimeout(1500);
+
+  expect(pageErrors, `page crashed on convert: ${pageErrors.join('; ')}`).toEqual([]);
+  const converted = await canvasPixels(page);
+  // The region raster changed (original text masked/inpainted + IText shown).
+  const convertedDiff = changedPixels(armed, converted);
+  expect(convertedDiff).toBeGreaterThan(0);
+});
+
+

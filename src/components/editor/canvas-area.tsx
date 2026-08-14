@@ -11,6 +11,7 @@ import {
   syncElementToFabric,
   findFabricObjectById,
   createFabricObject,
+  extractElementUpdates,
 } from '@/editor/core/element-factory';
 import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import { validateImageFile } from '@/lib/image-validation';
@@ -21,18 +22,21 @@ import { fetchOcrResult, OcrFlowError } from '@/editor/ocr/ocr-flow';
 import {
   processDetections,
   convertDetectedRegions,
+  convertArmedRegion,
   EditableTextPipelineError,
   isResultStale,
 } from '@/editor/pipeline/editable-text-pipeline';
-import { mapImageRectToCanvas } from '@/editor/ocr/ocr-to-elements';
+import { mapImageRectToCanvas, convertDetectedTextsToTextElements, buildLayerName } from '@/editor/ocr/ocr-to-elements';
 import { computeImageFitScale, DEFAULT_MAX_DIMENSION_RATIO } from '@/editor/core/image-fit';
 import type { ContextMenuItem } from '@/components/editor/context-menu';
+import type { DetectedText } from '@/ai/types/ocr';
 import type { DetectedTextRegion, ImageElement, TextElement, ShapeElement } from '@/types';
 
 const LOGICAL_WIDTH = 1080;
 const LOGICAL_HEIGHT = 1080;
 
 const regionOverlayMap = new WeakMap<FabricObject, string>();
+const armedItextRegionMap = new WeakMap<FabricObject, string>();
 
 export function CanvasArea() {
   const { t } = useTranslation();
@@ -67,8 +71,8 @@ export function CanvasArea() {
   const exportScale = useEditorStore((s) => s.exportScale);
   const selectedElementIds = useEditorStore((s) => s.selectedElementIds);
   const triggeredOcr = useEditorStore((s) => s.triggeredOcr);
-  const triggeredConvertRegion = useEditorStore((s) => s.triggeredConvertRegion);
-  const pendingConvertRegionId = useEditorStore((s) => s.pendingConvertRegionId);
+  const triggeredEditRegion = useEditorStore((s) => s.triggeredEditRegion);
+  const pendingEditRegionId = useEditorStore((s) => s.pendingEditRegionId);
   const triggeredConvertAll = useEditorStore((s) => s.triggeredConvertAll);
   const detectedOverlayKey = useEditorStore((s) => {
     const image = s.elements.find((el) => el.type === 'image');
@@ -588,6 +592,18 @@ export function CanvasArea() {
   }, [triggeredExport, canvasReady, exportFormat, exportScale, canvasInstanceRef]);
 
   const overlayObjectsRef = useRef<FabricObject[]>([]);
+  const armedItextsRef = useRef<
+    Map<
+      string,
+      {
+        itext: IText;
+        region: DetectedTextRegion;
+        imageId: string;
+        modified: boolean;
+        converting: boolean;
+      }
+    >
+  >(new Map());
 
   const clearDetectedOverlays = useCallback(() => {
     const canvas = canvasInstanceRef.current;
@@ -695,6 +711,245 @@ export function CanvasArea() {
     run();
   }, [triggeredOcr, canvasReady, canvasInstanceRef]);
 
+  const updateRegionStatus = useCallback(
+    (imageId: string, regionId: string, status: DetectedTextRegion['status']) => {
+      const state = useEditorStore.getState();
+      const img = state.elements.find((el) => el.id === imageId) as ImageElement | undefined;
+      if (!img?.detectedTexts) return;
+      const regions = img.detectedTexts.map((r) =>
+        r.id === regionId ? { ...r, status } : r,
+      );
+      state.storeDetections(state.activePageId, imageId, regions);
+    },
+    [],
+  );
+
+  const cancelArmedRegion = useCallback(
+    (regionId: string) => {
+      const entry = armedItextsRef.current.get(regionId);
+      if (!entry) return;
+      const canvas = canvasInstanceRef.current;
+      if (canvas) {
+        canvas.remove(entry.itext);
+        canvas.requestRenderAll();
+      }
+      armedItextsRef.current.delete(regionId);
+      updateRegionStatus(entry.imageId, regionId, 'detected');
+    },
+    [canvasInstanceRef, updateRegionStatus],
+  );
+
+  const convertArmedItext = useCallback(
+    async (regionId: string) => {
+      const entry = armedItextsRef.current.get(regionId);
+      if (!entry || entry.converting) return;
+      entry.converting = true;
+      entry.modified = true;
+
+      const store = useEditorStore.getState();
+      const sourcePageId = store.activePageId;
+      const image = store.elements.find(
+        (el) => el.id === entry.imageId,
+      ) as ImageElement | undefined;
+      if (!image) {
+        entry.converting = false;
+        entry.modified = false;
+        return;
+      }
+
+      const itext = entry.itext;
+      const updates = extractElementUpdates(itext, 'text') as Partial<TextElement>;
+      const maxZ = Math.max(0, ...store.elements.map((el) => el.zIndex));
+
+      const element: TextElement = {
+        id: generateId(),
+        type: 'text',
+        name: buildLayerName(itext.text ?? ''),
+        x: updates.x ?? 0,
+        y: updates.y ?? 0,
+        width: updates.width ?? 0,
+        height: updates.height ?? 0,
+        scaleX: updates.scaleX ?? 1,
+        scaleY: updates.scaleY ?? 1,
+        rotation: updates.rotation ?? 0,
+        opacity: 1,
+        visible: true,
+        locked: false,
+        zIndex: maxZ + 1,
+        text: updates.text ?? '',
+        fontFamily: updates.fontFamily ?? 'Arial',
+        fontSize: updates.fontSize ?? 20,
+        fontWeight: updates.fontWeight ?? 'normal',
+        fontStyle: updates.fontStyle ?? 'normal',
+        textAlign: updates.textAlign ?? 'left',
+        fill: updates.fill ?? '#000000',
+        letterSpacing: updates.letterSpacing ?? 0,
+        lineHeight: updates.lineHeight ?? 1.2,
+      };
+
+      try {
+        const result = await convertArmedRegion({
+          region: entry.region,
+          sourceImage: image,
+          element,
+          existingMasks: image.textMasks ?? [],
+        });
+
+        const state = useEditorStore.getState();
+        if (isResultStale(state.pages, sourcePageId, image.id)) return;
+
+        const sourcePage = state.pages.find((p) => p.id === sourcePageId);
+        if (!sourcePage) return;
+
+        pushHistoryImmediate(sourcePageId, sourcePage.elements, sourcePage.background);
+
+        useEditorStore.getState().commitRegionConversion(sourcePageId, image.id, {
+          maskedImageSrc: result.maskedImageSrc,
+          masks: [...(image.textMasks ?? []), ...result.masks],
+          elements: [element],
+          originalSrc: result.originalSrc,
+          convertedRegionIds: [entry.region.id],
+        });
+
+        const canvas = canvasInstanceRef.current;
+        if (canvas && state.activePageId === sourcePageId) {
+          const fabricImage = findFabricObjectById(canvas, image.id);
+          if (fabricImage instanceof FabricImage) {
+            try {
+              await fabricImage.setSrc(result.maskedImageSrc);
+            } catch (err) {
+              console.warn('[OCR] failed to swap masked image src', err);
+            }
+          }
+          setElementId(itext, element.id);
+          itext.set({ opacity: 1 });
+          canvas.requestRenderAll();
+        }
+
+        armedItextsRef.current.delete(regionId);
+        useEditorStore.getState().markUnsaved();
+      } catch (err) {
+        entry.converting = false;
+        entry.modified = false;
+        console.warn('[OCR] armed conversion failed', err);
+      }
+    },
+    [canvasInstanceRef],
+  );
+
+  const armRegion = useCallback(
+    async (regionId: string) => {
+      const store = useEditorStore.getState();
+      const sourcePageId = store.activePageId;
+      const image = store.elements.find(
+        (el) => el.type === 'image',
+      ) as ImageElement | undefined;
+      const region = image?.detectedTexts?.find(
+        (r) => r.id === regionId && r.status === 'detected',
+      );
+      if (!region || !image) return;
+
+      const maxZ = Math.max(0, ...store.elements.map((el) => el.zIndex));
+
+      const detected: DetectedText = {
+        id: region.id,
+        text: region.text,
+        confidence: region.confidence,
+        polygon: region.polygon.length >= 3 ? region.polygon : undefined,
+        boundingBox: region.boundingBox,
+      };
+
+      const [base] = convertDetectedTextsToTextElements({
+        result: { detectedTexts: [detected] },
+        sourceImage: image,
+        sourcePageId,
+        baseZIndex: maxZ + 1,
+        minConfidence: 0,
+      });
+      if (!base) return;
+      if (region.styleEstimate?.color) base.fill = region.styleEstimate.color;
+
+      const canvas = canvasInstanceRef.current;
+      if (!canvas) return;
+
+      const itext = (await createFabricObject(base)) as IText;
+      itext.set({ opacity: 0 });
+
+      armedItextRegionMap.set(itext, regionId);
+      armedItextsRef.current.set(regionId, {
+        itext,
+        region,
+        imageId: image.id,
+        modified: false,
+        converting: false,
+      });
+
+      canvas.add(itext);
+      canvas.setActiveObject(itext);
+
+      itext.on('editing:exited', () => {
+        const entry = armedItextsRef.current.get(regionId);
+        if (entry && !entry.modified) {
+          cancelArmedRegion(regionId);
+        }
+      });
+
+      updateRegionStatus(image.id, regionId, 'armed');
+
+      try {
+        itext.enterEditing();
+      } catch {
+        // best-effort — region stays armed and selectable
+      }
+
+      canvas.requestRenderAll();
+    },
+    [canvasInstanceRef, cancelArmedRegion, updateRegionStatus],
+  );
+
+  useEffect(() => {
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !canvasReady) return;
+
+    const handleObjectModified = (e: { target?: FabricObject }) => {
+      const target = e.target;
+      if (!target) return;
+      const regionId = armedItextRegionMap.get(target);
+      if (regionId) {
+        const entry = armedItextsRef.current.get(regionId);
+        if (entry && !entry.modified) {
+          void convertArmedItext(regionId);
+        }
+      }
+    };
+
+    const handleTextChanged = (e: { target?: FabricObject }) => {
+      const target = e.target;
+      if (!target) return;
+      const regionId = armedItextRegionMap.get(target);
+      if (regionId) {
+        const entry = armedItextsRef.current.get(regionId);
+        if (entry && !entry.modified) {
+          void convertArmedItext(regionId);
+        }
+      }
+    };
+
+    canvas.on('object:modified', handleObjectModified);
+    canvas.on('text:changed', handleTextChanged);
+    return () => {
+      canvas.off('object:modified', handleObjectModified);
+      canvas.off('text:changed', handleTextChanged);
+    };
+  }, [canvasReady, canvasInstanceRef, convertArmedItext]);
+
+  useEffect(() => {
+    if (!canvasReady || triggeredEditRegion === 0) return;
+    const regionId = pendingEditRegionId;
+    if (!regionId) return;
+    void armRegion(regionId);
+  }, [triggeredEditRegion, pendingEditRegionId, canvasReady, armRegion]);
+
   const convertRegionsFlow = useCallback(
     async (regions: DetectedTextRegion[]) => {
       if (regions.length === 0) return;
@@ -763,23 +1018,6 @@ export function CanvasArea() {
     },
     [canvasInstanceRef],
   );
-
-  useEffect(() => {
-    if (!canvasReady || triggeredConvertRegion === 0) return;
-    const regionId = pendingConvertRegionId;
-    if (!regionId) return;
-
-    const store = useEditorStore.getState();
-    const image = store.elements.find(
-      (el) => el.type === 'image',
-    ) as ImageElement | undefined;
-    const region = image?.detectedTexts?.find(
-      (r) => r.id === regionId && r.status === 'detected',
-    );
-    if (!region) return;
-
-    void convertRegionsFlow([region]);
-  }, [triggeredConvertRegion, pendingConvertRegionId, canvasReady, convertRegionsFlow]);
 
   useEffect(() => {
     if (!canvasReady || triggeredConvertAll === 0) return;

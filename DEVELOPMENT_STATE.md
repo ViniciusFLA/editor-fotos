@@ -309,6 +309,18 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 
 **Test:** Playwright `ocr-detection.spec.ts` — clicar overlay não crasha (`pageerror` coletado), "Editar texto" visível.
 
+### CHECKPOINT 36.5C — Preserve Visual Until First Edit
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+
+**Objetivo:** "Editar texto" NÃO converte imediatamente. A região entra em `armed` (IText transitório `opacity: 0` sobre o raster original intacto) e só converte na **primeira modificação real** (digitar/Backspace/paste/mover/redimensionar/rotacionar). Cancelar sem modificação (Escape/clique fora) reverte para `detected`.
+
+**Status:** `DetectedTextRegion.status` agora inclui `armed`. `convertArmedRegion` (pipeline) preserva o estado da IText modificada e liga a mask ao id do elemento. `commitRegionConversion` reutilizado. `project-serializer` normaliza `armed` → `detected` no save.
+
+**Eventos Fabric:** `canvas.on('text:changed')` (primeira tecla) e `canvas.on('object:modified')` (move/resize/rotate) disparam a conversão; `itext.on('editing:exited')` sem modificação cancela.
+
+**Tests:** `convertArmedRegion` (Vitest) + Playwright "Editar texto preserva o raster até a primeira edição" (raster idêntico no arm; converte após digitar). Total Vitest 85/85, Playwright 4/4.
+
 ### CHECKPOINT 33.1 — Production Validation
 
 **Status:** DEPLOYED — AWAITING MANUAL UI VALIDATION

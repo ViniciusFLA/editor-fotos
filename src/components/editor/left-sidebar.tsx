@@ -49,7 +49,7 @@ export function LeftSidebar() {
   const ocrError = useEditorStore((s) => s.ocrError);
   const triggerOcrDetect = useEditorStore((s) => s.triggerOcrDetect);
   const triggerConvertAll = useEditorStore((s) => s.triggerConvertAll);
-  const triggerConvertRegion = useEditorStore((s) => s.triggerConvertRegion);
+  const triggerEditRegion = useEditorStore((s) => s.triggerEditRegion);
   const selectedDetectedRegionId = useEditorStore((s) => s.selectedDetectedRegionId);
 
   const selectedRegion = useEditorStore((s) => {
@@ -59,7 +59,7 @@ export function LeftSidebar() {
         const region = (el as ImageElement).detectedTexts?.find(
           (r) => r.id === s.selectedDetectedRegionId && r.status === 'detected',
         );
-        // Return the region object itself (stable reference) — returning a new
+        // Return the region object itself (stable reference) â€” returning a new
         // wrapper object here would cause an infinite update loop.
         if (region) return region;
       }
@@ -76,8 +76,8 @@ export function LeftSidebar() {
   );
 
   const handleConvertRegion = useCallback(() => {
-    if (selectedDetectedRegionId) triggerConvertRegion(selectedDetectedRegionId);
-  }, [selectedDetectedRegionId, triggerConvertRegion]);
+    if (selectedDetectedRegionId) triggerEditRegion(selectedDetectedRegionId);
+  }, [selectedDetectedRegionId, triggerEditRegion]);
 
   const handleIgnoreRegion = useCallback(() => {
     if (!selectedRegion) return;
