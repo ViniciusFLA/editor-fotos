@@ -73,6 +73,7 @@ export function CanvasArea() {
   const triggeredEditRegion = useEditorStore((s) => s.triggeredEditRegion);
   const pendingEditRegionId = useEditorStore((s) => s.pendingEditRegionId);
   const triggeredConvertAll = useEditorStore((s) => s.triggeredConvertAll);
+  const triggeredClearDetections = useEditorStore((s) => s.triggeredClearDetections);
   const detectedOverlayKey = useEditorStore((s) => {
     const image = s.elements.find((el) => el.type === 'image');
     const regions = (image as ImageElement | undefined)?.detectedTexts;
@@ -669,6 +670,50 @@ export function CanvasArea() {
     if (!canvasReady || triggeredOcr === 0) return;
 
     const run = async () => {
+      // CHECKPOINT 36.5G — never re-detect an image with converted/transformed
+      // regions silently: re-running OCR would rebuild the raster and discard
+      // the user's edits. Guard before touching any proxy/overlay.
+      const pre = useEditorStore.getState();
+      const targetImage = pre.elements.find(
+        (el) => el.type === 'image',
+      ) as ImageElement | undefined;
+
+      const hasProtectedRegions =
+        targetImage?.detectedTexts?.some(
+          (r) => r.status === 'converted' || r.status === 'transformed',
+        ) ?? false;
+
+      if (hasProtectedRegions) {
+        useEditorStore.getState().setOcrError('alreadyProcessed');
+        return;
+      }
+
+      // Drop any previous detection-only state: overlays + armed proxy.
+      clearDetectedOverlays();
+      const canvas = canvasInstanceRef.current;
+      const armedId = pre.armedElement?.id;
+      if (canvas && armedId) {
+        const proxy = findFabricObjectById(canvas, armedId);
+        if (proxy) {
+          canvas.remove(proxy);
+          canvas.requestRenderAll();
+        }
+      }
+      useEditorStore.getState().clearArmedRegion();
+      useEditorStore.getState().setSelectedDetectedRegionId(null);
+
+      // Ensure the OCR target image is selected so fetchOcrResult resolves it
+      // even after cancelling an armed proxy (whose selection id is stale).
+      if (targetImage) {
+        const hasImageSelected = pre.selectedElementIds.some((id) => {
+          const el = pre.elements.find((e) => e.id === id);
+          return el?.type === 'image';
+        });
+        if (!hasImageSelected) {
+          useEditorStore.getState().setSelectedElementIds([targetImage.id]);
+        }
+      }
+
       try {
         const { result, sourceImage, sourcePageId, sourceImageId } =
           await fetchOcrResult();
@@ -689,6 +734,11 @@ export function CanvasArea() {
         useEditorStore.getState().storeDetections(sourcePageId, sourceImageId, detections.regions);
         useEditorStore.getState().markUnsaved();
         useEditorStore.getState().setOcrSuccess(detections.regions.length);
+
+        // Re-detect may produce regions whose id/status match the previous run,
+        // so `detectedOverlayKey` is unchanged and the overlay effect would not
+        // re-run. Render the fresh overlays explicitly.
+        renderDetectedOverlays();
       } catch (error) {
         const code =
           error instanceof OcrFlowError ||
@@ -700,7 +750,7 @@ export function CanvasArea() {
     };
 
     run();
-  }, [triggeredOcr, canvasReady, canvasInstanceRef]);
+  }, [triggeredOcr, canvasReady, canvasInstanceRef, clearDetectedOverlays, renderDetectedOverlays]);
 
   const updateRegionStatus = useCallback(
     (imageId: string, regionId: string, status: DetectedTextRegion['status']) => {
@@ -729,6 +779,50 @@ export function CanvasArea() {
     }
     state.clearArmedRegion();
   }, [canvasInstanceRef]);
+
+  // CHECKPOINT 36.5G — "Limpar detecção": restore the image to its exact
+  // pre-detection visual state (overlays removed, no raster/mask/TextElement
+  // changes) and re-enable normal image selection + a fresh detection.
+  useEffect(() => {
+    if (!canvasReady || triggeredClearDetections === 0) return;
+
+    const store = useEditorStore.getState();
+    const targetImage = store.elements.find(
+      (el) => el.type === 'image',
+    ) as ImageElement | undefined;
+
+    // Protection: converted/transformed regions are never silently discarded.
+    const hasProtectedRegions =
+      targetImage?.detectedTexts?.some(
+        (r) => r.status === 'converted' || r.status === 'transformed',
+      ) ?? false;
+    if (hasProtectedRegions) return;
+
+    cancelArmedRegion();
+    clearDetectedOverlays();
+
+    const after = useEditorStore.getState();
+    after.clearDetections(targetImage?.id);
+
+    const canvas = canvasInstanceRef.current;
+    if (canvas) {
+      canvas.discardActiveObject();
+      canvas.requestRenderAll();
+    }
+
+    // Restore normal image selection so "Detectar texto" is available again.
+    const next = useEditorStore.getState();
+    const img = next.elements.find((el) => el.type === 'image');
+    if (img) {
+      next.setSelectedElementIds([img.id]);
+    }
+  }, [
+    triggeredClearDetections,
+    canvasReady,
+    cancelArmedRegion,
+    clearDetectedOverlays,
+    canvasInstanceRef,
+  ]);
 
   // Convert the raster proxy into an editable IText (textual edit).
   const convertArmedElement = useCallback(async () => {

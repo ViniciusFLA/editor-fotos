@@ -49,12 +49,32 @@ export function LeftSidebar() {
   const ocrError = useEditorStore((s) => s.ocrError);
   const triggerOcrDetect = useEditorStore((s) => s.triggerOcrDetect);
   const triggerConvertAll = useEditorStore((s) => s.triggerConvertAll);
+  const triggerClearDetections = useEditorStore((s) => s.triggerClearDetections);
 
-  const hasDetectedRegions = useEditorStore((s) =>
+  const hasDetections = useEditorStore((s) =>
     s.elements.some(
       (el) =>
         el.type === 'image' &&
-        ((el as ImageElement).detectedTexts?.some((r) => r.status !== 'rejected') ?? false),
+        ((el as ImageElement).detectedTexts?.length ?? 0) > 0,
+    ),
+  );
+
+  const hasConvertedOrTransformed = useEditorStore((s) =>
+    s.elements.some(
+      (el) =>
+        el.type === 'image' &&
+        ((el as ImageElement).detectedTexts?.some(
+          (r) => r.status === 'converted' || r.status === 'transformed',
+        ) ?? false),
+    ),
+  );
+
+  const hasPendingDetected = useEditorStore((s) =>
+    s.elements.some(
+      (el) =>
+        el.type === 'image' &&
+        ((el as ImageElement).detectedTexts?.some((r) => r.status === 'detected') ??
+          false),
     ),
   );
 
@@ -63,6 +83,18 @@ export function LeftSidebar() {
     elements.some(
       (el) => el.id === selectedElementIds[0] && el.type === 'image',
     );
+
+  const canDetect =
+    hasSingleImageSelected &&
+    ocrStatus !== 'loading' &&
+    !hasConvertedOrTransformed;
+
+  const detectLabel =
+    ocrStatus === 'loading'
+      ? t('editor.ai.detecting')
+      : hasDetections
+        ? t('editor.ai.detectAgain')
+        : t('editor.ai.detectText');
 
   const handleTabClick = useCallback(
     (tabId: string) => {
@@ -192,33 +224,48 @@ export function LeftSidebar() {
         <div className='absolute left-full top-[120px] ml-1 w-56 bg-card border rounded shadow-lg z-50 p-2'>
           <button
             onClick={() => triggerOcrDetect()}
-            disabled={!hasSingleImageSelected || ocrStatus === 'loading'}
+            disabled={!canDetect}
             className='flex w-full items-center justify-center gap-2 rounded px-3 py-2 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
           >
-            {ocrStatus === 'loading'
-              ? t('editor.ai.detecting')
-              : t('editor.ai.detectText')}
+            {detectLabel}
           </button>
 
-          {!hasSingleImageSelected && ocrStatus !== 'loading' && (
+          {!hasSingleImageSelected && ocrStatus !== 'loading' && !hasDetections && (
             <p className='mt-2 text-[10px] leading-tight text-muted-foreground'>
               {t('editor.ai.selectImageHint')}
             </p>
           )}
 
-          {ocrStatus === 'success' && (
-            <p className='mt-2 text-[10px] leading-tight text-green-600'>
-              {t('editor.ai.detected').replace('{count}', String(ocrDetectedCount))}
+          {hasConvertedOrTransformed && (
+            <p className='mt-2 text-[10px] leading-tight text-amber-600'>
+              {t('editor.ai.protectedRegionsHint')}
             </p>
           )}
 
-          {hasDetectedRegions && (
-            <button
-              onClick={() => triggerConvertAll()}
-              className='mt-2 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
-            >
-              {t('editor.ai.convertAll')}
-            </button>
+          {hasDetections && ocrStatus !== 'loading' && (
+            <>
+              <p className='mt-2 text-[10px] leading-tight text-green-600'>
+                {t('editor.ai.detected').replace('{count}', String(ocrDetectedCount))}
+              </p>
+
+              {!hasConvertedOrTransformed && (
+                <button
+                  onClick={() => triggerClearDetections()}
+                  className='mt-2 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
+                >
+                  {t('editor.ai.clearDetection')}
+                </button>
+              )}
+
+              {hasPendingDetected && (
+                <button
+                  onClick={() => triggerConvertAll()}
+                  className='mt-2 flex w-full items-center justify-center gap-2 rounded px-3 py-1.5 text-[11px] font-medium bg-muted hover:bg-muted/80 text-foreground transition-colors'
+                >
+                  {t('editor.ai.convertAll')}
+                </button>
+              )}
+            </>
           )}
 
           {ocrStatus === 'error' && (

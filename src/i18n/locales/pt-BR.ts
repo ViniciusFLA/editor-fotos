@@ -161,6 +161,9 @@ const ptBR: Translations = {
     ai: {
       detectText: 'Detectar texto',
       detecting: 'Detectando texto...',
+      detectAgain: 'Detectar novamente',
+      clearDetection: 'Limpar detecção',
+      protectedRegionsHint: 'Há regiões já convertidas. A redetecção está bloqueada para proteger suas edições.',
       detected: '{count} textos detectados',
       selectImageHint: 'Selecione uma imagem para detectar texto.',
       convertAll: 'Converter todos',

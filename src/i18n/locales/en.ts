@@ -161,6 +161,9 @@ const en: Translations = {
     ai: {
       detectText: 'Detect text',
       detecting: 'Detecting text...',
+      detectAgain: 'Detect again',
+      clearDetection: 'Clear detection',
+      protectedRegionsHint: 'Some regions are already converted. Re-detection is blocked to protect your edits.',
       detected: '{count} texts detected',
       selectImageHint: 'Select an image to detect text.',
       convertAll: 'Convert all',

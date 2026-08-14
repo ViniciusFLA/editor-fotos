@@ -161,6 +161,9 @@ const es: Translations = {
     ai: {
       detectText: 'Detectar texto',
       detecting: 'Detectando texto...',
+      detectAgain: 'Detectar de nuevo',
+      clearDetection: 'Limpiar detección',
+      protectedRegionsHint: 'Hay regiones ya convertidas. La redetección está bloqueada para proteger tus ediciones.',
       detected: '{count} textos detectados',
       selectImageHint: 'Selecciona una imagen para detectar texto.',
       convertAll: 'Convertir todos',

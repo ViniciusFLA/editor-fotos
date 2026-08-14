@@ -159,6 +159,9 @@ export interface Translations {
     ai: {
       detectText: string;
       detecting: string;
+      detectAgain: string;
+      clearDetection: string;
+      protectedRegionsHint: string;
       detected: string;
       selectImageHint: string;
       convertAll: string;

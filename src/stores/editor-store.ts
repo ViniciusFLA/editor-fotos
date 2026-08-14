@@ -65,6 +65,7 @@ interface EditorStore {
   triggeredEditRegion: number;
   pendingEditRegionId: string | null;
   triggeredConvertAll: number;
+  triggeredClearDetections: number;
   armedElement: TextElement | null;
   armedRegionId: string | null;
   armedTextualEditVersion: number;
@@ -145,6 +146,8 @@ interface EditorStore {
   storeDetections: (pageId: string, imageId: string, regions: DetectedTextRegion[]) => void;
   triggerEditRegion: (regionId: string) => void;
   triggerConvertAll: () => void;
+  triggerClearDetections: () => void;
+  clearDetections: (imageId?: string) => void;
   commitRegionConversion: (
     pageId: string,
     imageId: string,
@@ -300,6 +303,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   triggeredEditRegion: 0,
   pendingEditRegionId: null,
   triggeredConvertAll: 0,
+  triggeredClearDetections: 0,
   armedElement: null,
   armedRegionId: null,
   armedTextualEditVersion: 0,
@@ -825,7 +829,13 @@ export const useEditorStore = create<EditorStore>((set) => ({
     set({ ocrStatus: 'loading', ocrError: null, ocrDetectedCount: 0 }),
 
   setOcrSuccess: (count) =>
-    set({ ocrStatus: 'success', ocrDetectedCount: count, ocrError: null }),
+    set({
+      ocrStatus: 'success',
+      ocrDetectedCount: count,
+      ocrError: null,
+      selectedDetectedRegionId: null,
+      pendingEditRegionId: null,
+    }),
 
   setOcrError: (message) =>
     set({ ocrStatus: 'error', ocrDetectedCount: 0, ocrError: message }),
@@ -860,6 +870,69 @@ export const useEditorStore = create<EditorStore>((set) => ({
 
   triggerConvertAll: () =>
     set((state) => ({ triggeredConvertAll: state.triggeredConvertAll + 1 })),
+
+  triggerClearDetections: () =>
+    set((state) => ({
+      triggeredClearDetections: state.triggeredClearDetections + 1,
+    })),
+
+  /**
+   * CHECKPOINT 36.5G — clear the OCR detection state for an image.
+   *
+   * Non-destructive by design: removes only the transient `detectedTexts`
+   * metadata (overlays, region selection, armed proxy reference, OCR status).
+   * The raster (src), masks and TextElements are never touched.
+   *
+   * Safety: if the target image has any `converted` or `transformed` region the
+   * operation is refused entirely — silently wiping user edits is forbidden.
+   */
+  clearDetections: (imageId) =>
+    set((state) => {
+      const targetId =
+        imageId ??
+        (state.elements.find(
+          (el) =>
+            el.type === 'image' &&
+            ((el as ImageElement).detectedTexts?.length ?? 0) > 0,
+        ) as ImageElement | undefined)?.id;
+
+      const target = targetId
+        ? (state.elements.find((el) => el.id === targetId) as
+            | ImageElement
+            | undefined)
+        : undefined;
+
+      const hasProtectedRegions =
+        target?.detectedTexts?.some(
+          (r) => r.status === 'converted' || r.status === 'transformed',
+        ) ?? false;
+
+      if (hasProtectedRegions) {
+        return state;
+      }
+
+      const apply = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (targetId && el.id !== targetId) return el;
+          if (el.type !== 'image') return el;
+          return { ...el, detectedTexts: undefined } as ImageElement;
+        });
+
+      return {
+        elements: apply(state.elements),
+        pages: state.pages.map((p) => ({
+          ...p,
+          elements: apply(p.elements),
+        })),
+        selectedDetectedRegionId: null,
+        pendingEditRegionId: null,
+        armedElement: null,
+        armedRegionId: null,
+        ocrStatus: 'idle' as const,
+        ocrDetectedCount: 0,
+        ocrError: null,
+      };
+    }),
 
   commitRegionConversion: (pageId, imageId, updates) =>
     set((state) => {
@@ -937,7 +1010,9 @@ export const useEditorStore = create<EditorStore>((set) => ({
           return {
             ...img,
             detectedTexts: img.detectedTexts?.map((r) =>
-              r.id === armedRegionId ? { ...r, status: 'detected' as const } : r,
+              r.id === armedRegionId && r.status === 'armed'
+                ? { ...r, status: 'detected' as const }
+                : r,
             ),
           } as ImageElement;
         });
