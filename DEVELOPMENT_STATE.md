@@ -41,10 +41,11 @@
 **ETAPA 36.3 — Clone Relationship Integrity** — CONCLUIDA
 **ETAPA 36.4 — OCR Text Style Estimation** — CONCLUIDA
 **CHECKPOINT 36.5 — Preserve Original Text Until Edit** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+**CHECKPOINT 36.5F — Pixel-Perfect Raster Text Proxy Editing** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
 **ETAPA 37 — Segmentation Provider** — PROVIDER ABSTRACTION COMPLETED — REAL PROVIDER DEFERRED
 
 **Próxima etapa:** ETAPA 38 — Magic Select
-**Última atualização:** 2026-08-13
+**Última atualização:** 2026-08-14
 
 ### ETAPA 33 — OCR → Editable Text Layers
 
@@ -344,6 +345,41 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 **Direct edit:** overlay click → `setSelectedDetectedRegionId` + `triggerEditRegion` (arma direto). RightPanel monta read-only (sem mutação); cada input envia só a própria propriedade.
 
 **Tests:** Vitest 89/89 (+3 style preservation), Playwright 4/4 (direct edit abre propriedades; raster preservado até a primeira edição real).
+
+### CHECKPOINT 36.5F — Pixel-Perfect Raster Text Proxy Editing
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER MANUAL VALIDATION
+
+**Commit (funcional):** `e139652` — feat: add pixel-perfect raster text proxy editing
+
+**Production:** https://editor-fotos-jet.vercel.app (deploy `dpl_3pnqfNey4NnHwifvH6rH8u5eeodR` READY, production contém `e139652`)
+
+**Build/Validation:** TypeScript PASS, ESLint PASS, Vitest 98/98 PASS, Playwright 8/8 PASS, Build PASS.
+
+**Arquitetura:**
+
+```
+Detected text
+→ RasterProxy pixel-perfect
+```
+
+**Spatial transform (move / resize / rotate):**
+- permanece `RasterProxy`
+- mantém os pixels originais
+- primeira transformação limpa a posição original via mask/inpaint (`commitProxyTransform` → região `transformed` com `proxyTransform`)
+
+**Textual edit (content / fontSize / fontFamily / fontWeight / textAlign / fill etc.):**
+- converte para `IText`
+- preserva `baseSnapshot`
+- aplica somente `userPatch`
+
+**Color regression:** FIXED
+
+**Regra:** cor estimada válida NÃO é descartada apenas porque `confidence < 0.6`.
+
+**Manual validation:** AWAITING USER
+
+**ETAPA 39:** NOT STARTED
 
 ### CHECKPOINT 33.1 — Production Validation
 
