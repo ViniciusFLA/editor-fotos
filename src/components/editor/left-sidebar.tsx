@@ -52,14 +52,16 @@ export function LeftSidebar() {
   const triggerConvertRegion = useEditorStore((s) => s.triggerConvertRegion);
   const selectedDetectedRegionId = useEditorStore((s) => s.selectedDetectedRegionId);
 
-  const selectedRegionInfo = useEditorStore((s) => {
+  const selectedRegion = useEditorStore((s) => {
     if (!s.selectedDetectedRegionId) return null;
     for (const el of s.elements) {
       if (el.type === 'image') {
         const region = (el as ImageElement).detectedTexts?.find(
           (r) => r.id === s.selectedDetectedRegionId && r.status === 'detected',
         );
-        if (region) return { imageId: el.id, region };
+        // Return the region object itself (stable reference) — returning a new
+        // wrapper object here would cause an infinite update loop.
+        if (region) return region;
       }
     }
     return null;
@@ -78,18 +80,20 @@ export function LeftSidebar() {
   }, [selectedDetectedRegionId, triggerConvertRegion]);
 
   const handleIgnoreRegion = useCallback(() => {
-    if (!selectedRegionInfo) return;
+    if (!selectedRegion) return;
     const state = useEditorStore.getState();
     const img = state.elements.find(
-      (el) => el.id === selectedRegionInfo.imageId,
+      (el) =>
+        el.type === 'image' &&
+        ((el as ImageElement).detectedTexts?.some((r) => r.id === selectedRegion.id) ?? false),
     ) as ImageElement | undefined;
     if (!img?.detectedTexts) return;
     const regions = img.detectedTexts.map((r) =>
-      r.id === selectedRegionInfo.region.id ? { ...r, status: 'rejected' as const } : r,
+      r.id === selectedRegion.id ? { ...r, status: 'rejected' as const } : r,
     );
     state.storeDetections(state.activePageId, img.id, regions);
     state.setSelectedDetectedRegionId(null);
-  }, [selectedRegionInfo]);
+  }, [selectedRegion]);
 
   const hasSingleImageSelected =
     selectedElementIds.length === 1 &&
@@ -254,15 +258,15 @@ export function LeftSidebar() {
             </button>
           )}
 
-          {selectedRegionInfo && (
+          {selectedRegion && (
             <div className='mt-2 rounded border border-border bg-background p-2'>
               <p className='text-[11px] font-medium leading-tight'>
-                {selectedRegionInfo.region.text}
+                {selectedRegion.text}
               </p>
               <p className='mt-0.5 text-[10px] leading-tight text-muted-foreground'>
                 {t('editor.ai.confidence').replace(
                   '{value}',
-                  String(Math.round(selectedRegionInfo.region.confidence * 100)),
+                  String(Math.round(selectedRegion.confidence * 100)),
                 )}
               </p>
               <div className='mt-1.5 flex gap-1'>

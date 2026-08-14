@@ -297,6 +297,18 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 
 **Tests:** 9 novos (`detection.test.ts` + clone remap) + Playwright `ocr-detection.spec.ts` (mock OCR → raster unchanged). Total Vitest 84/84, Playwright 2/2.
 
+### CHECKPOINT 36.5A — Detected Text Click Crash Fix
+
+**Status:** FIXED + DEPLOYED — AWAITING USER VALIDATION
+
+**Bug:** clicar em uma região detectada causava crash do renderer ("This page couldn't load").
+
+**Root cause:** o selector `selectedRegionInfo` (`left-sidebar.tsx`) retornava um objeto novo `{ imageId, region }` a cada chamada. O `useStore` do Zustand (via `useSyncExternalStore`) compara com `Object.is` → sempre `false` → loop infinito de re-render → "Maximum update depth exceeded".
+
+**Fix:** o selector agora retorna a própria `region` (referência estável) em vez de um wrapper novo; `imageId` é derivado nos handlers.
+
+**Test:** Playwright `ocr-detection.spec.ts` — clicar overlay não crasha (`pageerror` coletado), "Editar texto" visível.
+
 ### CHECKPOINT 33.1 — Production Validation
 
 **Status:** DEPLOYED — AWAITING MANUAL UI VALIDATION

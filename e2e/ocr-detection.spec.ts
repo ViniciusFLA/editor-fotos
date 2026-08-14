@@ -91,3 +91,51 @@ test('Detectar texto preserves the raster (no visual change)', async ({ page }) 
   // The "Converter todos" action appears (detection stored regions, not conversion).
   await expect(page.getByRole('button', { name: 'Converter todos' })).toBeVisible();
 });
+
+test('clicking a detected region selects it without crashing', async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
+
+  await page.route('**/api/ai/ocr', async (route) => {
+    if (route.request().method() === 'POST') {
+      await route.fulfill({ json: MOCK_OCR });
+    } else {
+      await route.continue();
+    }
+  });
+
+  await page.goto('/');
+  await page.locator('canvas').first().waitFor({ state: 'visible' });
+  await page.locator('input[type=file]').setInputFiles(FIXTURE);
+  await page.waitForTimeout(1500);
+
+  const box = await page.locator('canvas').first().boundingBox();
+  const cx = box!.x + box!.width / 2;
+  const cy = box!.y + box!.height / 2;
+  await page.mouse.click(cx, cy);
+  await page.waitForTimeout(300);
+
+  await page.locator('button[title="IA"]').click();
+  await page.getByRole('button', { name: 'Detectar texto' }).click();
+  await page.getByText(/textos detectados/).waitFor({ timeout: 15000 });
+  await page.waitForTimeout(400);
+
+  // Click the overlay for d1 (bbox 150,150,300x80 → canvas center 372,295).
+  const scale = box!.width / 1080;
+  const ox = box!.x + 372 * scale;
+  const oy = box!.y + 295 * scale;
+  await page.mouse.click(ox, oy);
+  await page.waitForTimeout(500);
+
+  expect(pageErrors, `page crashed: ${pageErrors.join('; ')}`).toEqual([]);
+
+  // The region panel appears with the "Editar texto" action.
+  await expect(page.getByRole('button', { name: 'Editar texto' })).toBeVisible();
+  await expect(page.getByText('CONFIRA')).toBeVisible();
+
+  // The image raster is still intact (no conversion happened on click).
+  const after = await canvasPixels(page);
+  // (raster unchanged: already covered by the previous test)
+  expect(after.length).toBeGreaterThan(0);
+});
+
