@@ -72,6 +72,7 @@ function extractCommonUpdates(
 export function normalizeFabricObject(fabricObject: FabricObject): void {
   if (fabricObject instanceof Group) return;
   if (fabricObject instanceof Line) return;
+  if (fabricObject instanceof FabricImage) return;
 
   const sx = fabricObject.scaleX ?? 1;
   const sy = fabricObject.scaleY ?? 1;
