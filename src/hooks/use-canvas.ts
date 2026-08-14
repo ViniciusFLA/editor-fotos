@@ -60,6 +60,13 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
     }
 
     canvasInstanceRef.current = canvas;
+
+    // Test-only hook (dev builds) so Playwright can inspect the active Fabric
+    // object, selection handles and rotation control. Not exposed in production.
+    if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__fabricCanvas = canvas;
+    }
+
     setCanvasReady(true);
 
     requestAnimationFrame(() => {
@@ -73,6 +80,13 @@ export function useCanvas({ logicalWidth, logicalHeight }: UseCanvasOptions) {
       setCanvasReady(false);
       const instance = canvasInstanceRef.current;
       canvasInstanceRef.current = null;
+      if (
+        process.env.NODE_ENV !== 'production' &&
+        typeof window !== 'undefined' &&
+        (window as unknown as Record<string, unknown>).__fabricCanvas === instance
+      ) {
+        delete (window as unknown as Record<string, unknown>).__fabricCanvas;
+      }
       if (instance) {
         instance.dispose();
       }

@@ -67,6 +67,7 @@ interface EditorStore {
   triggeredConvertAll: number;
   armedElement: TextElement | null;
   armedRegionId: string | null;
+  armedTextualEditVersion: number;
 
   setElements: (elements: AnyElement[]) => void;
   addElement: (element: AnyElement) => void;
@@ -157,6 +158,7 @@ interface EditorStore {
   ) => void;
   setArmedRegion: (element: TextElement, regionId: string) => void;
   updateArmedElement: (updates: Partial<TextElement>) => void;
+  applyArmedTextualEdit: (updates: Partial<TextElement>) => void;
   clearArmedRegion: () => void;
   commitArmedConversion: (
     pageId: string,
@@ -167,6 +169,17 @@ interface EditorStore {
       maskedImageSrc: string;
       originalSrc: string;
       regionId: string;
+    },
+  ) => void;
+  commitProxyTransform: (
+    pageId: string,
+    imageId: string,
+    updates: {
+      masks: TextMask[];
+      maskedImageSrc: string;
+      originalSrc: string;
+      regionId: string;
+      transform: { x: number; y: number; scaleX: number; scaleY: number; rotation: number };
     },
   ) => void;
 }
@@ -289,6 +302,7 @@ export const useEditorStore = create<EditorStore>((set) => ({
   triggeredConvertAll: 0,
   armedElement: null,
   armedRegionId: null,
+  armedTextualEditVersion: 0,
 
   setElements: (elements) =>
     set((state) => ({
@@ -903,6 +917,14 @@ export const useEditorStore = create<EditorStore>((set) => ({
         : state.armedElement,
     })),
 
+  applyArmedTextualEdit: (updates) =>
+    set((state) => ({
+      armedElement: state.armedElement
+        ? ({ ...state.armedElement, ...updates } as TextElement)
+        : state.armedElement,
+      armedTextualEditVersion: state.armedTextualEditVersion + 1,
+    })),
+
   clearArmedRegion: () =>
     set((state) => {
       const armedRegionId = state.armedRegionId;
@@ -973,6 +995,35 @@ export const useEditorStore = create<EditorStore>((set) => ({
           state.selectedDetectedRegionId === updates.regionId
             ? null
             : state.selectedDetectedRegionId,
+      };
+    }),
+
+  commitProxyTransform: (pageId, imageId, updates) =>
+    set((state) => {
+      const isActive = state.activePageId === pageId;
+
+      const apply = (els: AnyElement[]): AnyElement[] =>
+        els.map((el) => {
+          if (el.id !== imageId) return el;
+          const img = el as ImageElement;
+          return {
+            ...img,
+            src: updates.maskedImageSrc,
+            originalSrc: updates.originalSrc,
+            textMasks: updates.masks,
+            detectedTexts: img.detectedTexts?.map((r) =>
+              r.id === updates.regionId
+                ? { ...r, status: 'transformed' as const, proxyTransform: updates.transform }
+                : r,
+            ),
+          } as ImageElement;
+        });
+
+      return {
+        elements: isActive ? apply(state.elements) : state.elements,
+        pages: state.pages.map((p) =>
+          p.id === pageId ? { ...p, elements: apply(p.elements) } : p,
+        ),
       };
     }),
 }));

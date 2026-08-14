@@ -160,10 +160,13 @@ export function estimateTextColor(
   const glyphRatio = fgCount / total;
   const confidence = Math.max(0, Math.min(1, dominance * 0.6 + glyphRatio * 0.4));
 
-  if (confidence < MIN_COLOR_CONFIDENCE) {
-    return { color: DEFAULT_TEXT_COLOR, confidence };
-  }
-
+  // CHECKPOINT 36.5F — never discard a usable color because of low confidence.
+  //
+  // The confidence score is kept as metadata (for diagnostics/trace) but the
+  // estimated glyph color is returned whenever a dominant foreground cluster
+  // was actually found. `DEFAULT_TEXT_COLOR` is only used when there is no
+  // glyph/background contrast at all (the early-return branches above), never
+  // as a replacement for a real, if uncertain, color estimate.
   return { color: toHex(fgColor), confidence };
 }
 

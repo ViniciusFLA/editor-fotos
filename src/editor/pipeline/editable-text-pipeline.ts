@@ -14,7 +14,7 @@ import {
 } from '@/editor/masks/inpaint';
 import {
   estimateTextStyles,
-  MIN_COLOR_CONFIDENCE,
+  DEFAULT_TEXT_COLOR,
   type ColorEstimate,
 } from '@/editor/ocr/text-style';
 
@@ -289,7 +289,7 @@ export async function processDetections(
       polygon: detected.polygon ?? [],
       boundingBox: { ...detected.boundingBox },
       styleEstimate:
-        style && style.confidence >= MIN_COLOR_CONFIDENCE
+        style && style.color !== DEFAULT_TEXT_COLOR
           ? { color: style.color, colorConfidence: style.confidence }
           : undefined,
       status: 'detected',

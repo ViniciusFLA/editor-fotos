@@ -13,6 +13,24 @@ function round(n: number, decimals = 0): number {
   return Math.round(n * factor) / factor;
 }
 
+const TEXTUAL_PROPS = [
+  'text',
+  'fontFamily',
+  'fontSize',
+  'fontWeight',
+  'fontStyle',
+  'textAlign',
+  'fill',
+  'letterSpacing',
+  'lineHeight',
+] as const;
+
+function hasTextualChange(updates: Partial<AnyElement>): boolean {
+  return (Object.keys(updates) as (keyof AnyElement)[]).some((k) =>
+    (TEXTUAL_PROPS as readonly string[]).includes(k),
+  );
+}
+
 function FieldRow({
   label,
   children,
@@ -84,7 +102,11 @@ export function RightPanel() {
     (updates: Partial<AnyElement>) => {
       const store = useEditorStore.getState();
       if (store.armedElement) {
-        store.updateArmedElement(updates as Partial<TextElement>);
+        if (hasTextualChange(updates)) {
+          store.applyArmedTextualEdit(updates as Partial<TextElement>);
+        } else {
+          store.updateArmedElement(updates as Partial<TextElement>);
+        }
         return;
       }
       const currentId = store.selectedElementIds[0];
@@ -114,11 +136,9 @@ export function RightPanel() {
         setLoadingFont(null);
       }
 
-      const store = useEditorStore.getState();
-      pushHistoryDebounced(store.activePageId, store.elements, store.pageBackground);
-      updateElement(element.id, { fontFamily: family });
+      handleChange({ fontFamily: family });
     },
-    [element, updateElement, triggerFontReload],
+    [element, handleChange, triggerFontReload],
   );
 
   const handleBackgroundChange = useCallback(

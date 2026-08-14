@@ -12,7 +12,6 @@ import {
   syncElementToFabric,
   findFabricObjectById,
   createFabricObject,
-  extractElementUpdates,
 } from '@/editor/core/element-factory';
 import { pushHistoryImmediate } from '@/editor/history/history-manager';
 import { validateImageFile } from '@/lib/image-validation';
@@ -731,16 +730,7 @@ export function CanvasArea() {
     state.clearArmedRegion();
   }, [canvasInstanceRef]);
 
-  const syncItextToArmedElement = useCallback(
-    (itext: IText) => {
-      const store = useEditorStore.getState();
-      if (!store.armedElement || store.armedElement.id !== getElementId(itext)) return;
-      const updates = extractElementUpdates(itext, 'text') as Partial<TextElement>;
-      store.updateArmedElement(updates);
-    },
-    [],
-  );
-
+  // Convert the raster proxy into an editable IText (textual edit).
   const convertArmedElement = useCallback(async () => {
     if (armedConvertingRef.current) return;
     const store = useEditorStore.getState();
@@ -756,10 +746,10 @@ export function CanvasArea() {
     if (!image || !region) return;
 
     const canvas = canvasInstanceRef.current;
-    const itext = canvas
-      ? (findFabricObjectById(canvas, armedElement.id) as IText | undefined)
+    const proxy = canvas
+      ? findFabricObjectById(canvas, armedElement.id)
       : undefined;
-    if (!itext) return;
+    if (!proxy) return;
 
     armedConvertingRef.current = true;
 
@@ -777,8 +767,6 @@ export function CanvasArea() {
       const sourcePage = state.pages.find((p) => p.id === sourcePageId);
       if (!sourcePage) return;
 
-      // Re-read the latest armed element (text/position may have changed
-      // during the async inpainting).
       const latest = state.armedElement ?? armedElement;
       const element: TextElement = {
         ...latest,
@@ -806,7 +794,12 @@ export function CanvasArea() {
             console.warn('[OCR] failed to swap masked image src', err);
           }
         }
-        itext.set({ opacity: 1 });
+        // Replace the raster proxy with the editable IText.
+        const itext = createFabricObject(element) as IText;
+        setElementId(itext, element.id);
+        canvas.remove(proxy);
+        canvas.add(itext);
+        canvas.setActiveObject(itext);
         canvas.requestRenderAll();
       }
 
@@ -817,6 +810,94 @@ export function CanvasArea() {
       armedConvertingRef.current = false;
     }
   }, [canvasInstanceRef]);
+
+  // First spatial transform: mask + inpaint the original region and keep the
+  // raster proxy pixel-perfect at its new transform.
+  const handleProxyTransform = useCallback(
+    async (proxy: FabricImage, regionId: string) => {
+      const store = useEditorStore.getState();
+      const image = store.elements.find(
+        (el) => el.type === 'image',
+      ) as ImageElement | undefined;
+      const region = image?.detectedTexts?.find((r) => r.id === regionId);
+      if (!image || !region) return;
+
+      const transform = {
+        x: proxy.left ?? 0,
+        y: proxy.top ?? 0,
+        scaleX: proxy.scaleX ?? 1,
+        scaleY: proxy.scaleY ?? 1,
+        rotation: proxy.angle ?? 0,
+      };
+
+      // Sync the transform to the armed snapshot (so the RightPanel reflects it).
+      store.updateArmedElement({
+        x: transform.x,
+        y: transform.y,
+        width: (proxy.width ?? 1) * transform.scaleX,
+        height: (proxy.height ?? 1) * transform.scaleY,
+        rotation: transform.rotation,
+        opacity: proxy.opacity ?? 1,
+      });
+
+      if (region.status === 'armed') {
+        // First real spatial transform: clean the original position.
+        try {
+          const element = store.armedElement ?? ({} as TextElement);
+          const result = await convertArmedRegion({
+            region,
+            sourceImage: image,
+            element,
+            existingMasks: image.textMasks ?? [],
+          });
+
+          const state = useEditorStore.getState();
+          if (isResultStale(state.pages, store.activePageId, image.id)) return;
+          const sourcePage = state.pages.find((p) => p.id === store.activePageId);
+          if (!sourcePage) return;
+
+          pushHistoryImmediate(store.activePageId, sourcePage.elements, sourcePage.background);
+
+          useEditorStore.getState().commitProxyTransform(store.activePageId, image.id, {
+            masks: [...(image.textMasks ?? []), ...result.masks],
+            maskedImageSrc: result.maskedImageSrc,
+            originalSrc: result.originalSrc,
+            regionId,
+            transform,
+          });
+
+          const canvas = canvasInstanceRef.current;
+          if (canvas && state.activePageId === store.activePageId) {
+            const fabricImage = findFabricObjectById(canvas, image.id);
+            if (fabricImage instanceof FabricImage) {
+              try {
+                await fabricImage.setSrc(result.maskedImageSrc);
+              } catch (err) {
+                console.warn('[OCR] failed to swap masked image src', err);
+              }
+            }
+            canvas.requestRenderAll();
+          }
+
+          useEditorStore.getState().markUnsaved();
+        } catch (err) {
+          console.warn('[OCR] proxy transform failed', err);
+        }
+      } else {
+        // Region already masked — just persist the new transform.
+        const img = useEditorStore.getState().elements.find(
+          (el) => el.id === image.id,
+        ) as ImageElement | undefined;
+        if (img?.detectedTexts) {
+          useEditorStore.getState().storeDetections(store.activePageId, image.id, img.detectedTexts.map((r) =>
+            r.id === regionId ? { ...r, proxyTransform: transform } : r,
+          ));
+          useEditorStore.getState().markUnsaved();
+        }
+      }
+    },
+    [canvasInstanceRef],
+  );
 
   const armRegion = useCallback(
     async (regionId: string) => {
@@ -830,7 +911,6 @@ export function CanvasArea() {
       );
       if (!region || !image) return;
 
-      // Cancel any previous armed region first.
       cancelArmedRegion();
 
       const maxZ = Math.max(0, ...store.elements.map((el) => el.zIndex));
@@ -852,60 +932,80 @@ export function CanvasArea() {
       });
       if (!base) return;
       if (region.styleEstimate?.color) base.fill = region.styleEstimate.color;
-      base.opacity = 0;
 
       const canvas = canvasInstanceRef.current;
       if (!canvas) return;
+      const baseFabricImage = findFabricObjectById(canvas, image.id) as
+        | FabricImage
+        | undefined;
+      if (!baseFabricImage) return;
 
-      const itext = (await createFabricObject(base)) as IText;
-      setElementId(itext, base.id);
+      // Raster proxy: a FabricImage sharing the base element, cropped to the
+      // region, showing the exact original pixels.
+      const proxy = new FabricImage(baseFabricImage.getElement());
+      const mapped = mapImageRectToCanvas(image, region.boundingBox);
+      const s = mapped.width / Math.max(1, region.boundingBox.width);
+      proxy.set({
+        cropX: region.boundingBox.x,
+        cropY: region.boundingBox.y,
+        width: region.boundingBox.width,
+        height: region.boundingBox.height,
+        left: mapped.x,
+        top: mapped.y,
+        scaleX: s,
+        scaleY: s,
+        angle: mapped.rotation,
+        selectable: true,
+        evented: true,
+        hasControls: true,
+        hasBorders: true,
+      });
+      setElementId(proxy, base.id);
 
       useEditorStore.getState().setArmedRegion(base, region.id);
 
-      canvas.add(itext);
-      canvas.setActiveObject(itext);
-
-      itext.on('editing:exited', () => {
-        const state = useEditorStore.getState();
-        if (state.armedElement?.id === base.id && !armedConvertingRef.current) {
-          cancelArmedRegion();
-        }
-      });
+      canvas.add(proxy);
+      canvas.setActiveObject(proxy);
 
       updateRegionStatus(image.id, region.id, 'armed');
-
-      try {
-        itext.enterEditing();
-      } catch {
-        // best-effort — region stays armed and selectable
-      }
 
       canvas.requestRenderAll();
     },
     [canvasInstanceRef, cancelArmedRegion, updateRegionStatus],
   );
 
-  // RightPanel property edits on the armed element trigger conversion.
+  // Textual edits trigger conversion to IText.
+  const armedTextualEditVersion = useEditorStore((s) => s.armedTextualEditVersion);
+
+  useEffect(() => {
+    if (armedTextualEditVersion === 0) return;
+    void convertArmedElement();
+  }, [armedTextualEditVersion, convertArmedElement]);
+
+  // Spatial edits from the RightPanel (X/Y/W/H/R/O) are applied to the raster
+  // proxy without triggering conversion.
   const armedElement = useEditorStore((s) => s.armedElement);
   const armedElementJson = useEditorStore((s) =>
     s.armedElement ? JSON.stringify(s.armedElement) : '',
   );
-  const armedBaseJsonRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!armedElement) {
-      armedBaseJsonRef.current = null;
-      return;
-    }
-    if (armedBaseJsonRef.current === null) {
-      armedBaseJsonRef.current = armedElementJson;
-      return;
-    }
-    if (armedElementJson !== armedBaseJsonRef.current) {
-      armedBaseJsonRef.current = armedElementJson;
-      void convertArmedElement();
-    }
-  }, [armedElement, armedElementJson, convertArmedElement]);
+    const canvas = canvasInstanceRef.current;
+    if (!canvas || !armedElement || !canvasReady) return;
+    const proxy = findFabricObjectById(canvas, armedElement.id);
+    if (!(proxy instanceof FabricImage)) return;
+    const naturalW = proxy.width || 1;
+    const naturalH = proxy.height || 1;
+    proxy.set({
+      left: armedElement.x,
+      top: armedElement.y,
+      angle: armedElement.rotation,
+      scaleX: armedElement.width / naturalW,
+      scaleY: armedElement.height / naturalH,
+      opacity: armedElement.opacity,
+    });
+    canvas.requestRenderAll();
+  }, [armedElementJson, armedElement, canvasReady, canvasInstanceRef]);
 
   useEffect(() => {
     const canvas = canvasInstanceRef.current;
@@ -916,28 +1016,15 @@ export function CanvasArea() {
       if (!target) return;
       const store = useEditorStore.getState();
       if (store.armedElement && getElementId(target) === store.armedElement.id) {
-        syncItextToArmedElement(target as IText);
-        void convertArmedElement();
-      }
-    };
-
-    const handleTextChanged = (e: { target?: FabricObject }) => {
-      const target = e.target;
-      if (!target) return;
-      const store = useEditorStore.getState();
-      if (store.armedElement && getElementId(target) === store.armedElement.id) {
-        syncItextToArmedElement(target as IText);
-        void convertArmedElement();
+        void handleProxyTransform(target as FabricImage, store.armedRegionId ?? '');
       }
     };
 
     canvas.on('object:modified', handleObjectModified);
-    canvas.on('text:changed', handleTextChanged);
     return () => {
       canvas.off('object:modified', handleObjectModified);
-      canvas.off('text:changed', handleTextChanged);
     };
-  }, [canvasReady, canvasInstanceRef, convertArmedElement, syncItextToArmedElement]);
+  }, [canvasReady, canvasInstanceRef, handleProxyTransform]);
 
   useEffect(() => {
     if (!canvasReady || triggeredEditRegion === 0) return;

@@ -136,6 +136,41 @@ describe('estimateTextColor (ETAPA 36.4)', () => {
     expect(est.confidence).toBeLessThan(MIN_COLOR_CONFIDENCE);
   });
 
+  it('returns the dominant glyph color even at low confidence (CHECKPOINT 36.5F)', () => {
+    // Reproduces the real-world "yellow 200% on dark blue" case where thin
+    // anti-aliased glyphs drive the confidence below MIN_COLOR_CONFIDENCE.
+    // Before the fix this returned DEFAULT_TEXT_COLOR (#000000); it must now
+    // return the estimated yellow.
+    const width = 120;
+    const height = 50;
+    const bg: RGB = [20, 20, 80];
+    const img = solid(width, height, bg);
+    const main: RGB = [255, 212, 0];
+    const edge: RGB = [200, 165, 40];
+
+    for (let x = 20; x < 100; x++) {
+      const mod = x % 10;
+      if (mod >= 3) continue; // thin vertical strokes
+      const isEdge = mod === 0;
+      const c = isEdge ? edge : main;
+      for (let y = 12; y < 36; y++) {
+        const i = (y * width + x) * 4;
+        img.data[i] = c[0];
+        img.data[i + 1] = c[1];
+        img.data[i + 2] = c[2];
+      }
+    }
+
+    const est = estimateTextColor(img, { x: 10, y: 5, width: 100, height: 40 });
+    const [r, g, b] = parse(est.color);
+
+    // The dominant cluster is still yellow — never the black default.
+    expect(est.color).not.toBe(DEFAULT_TEXT_COLOR);
+    expect(r).toBeGreaterThan(150);
+    expect(g).toBeGreaterThan(150);
+    expect(b).toBeLessThan(120);
+  });
+
   it('falls back for a degenerate (too small) region', () => {
     const img = solid(10, 10, [0, 0, 0]);
     const est = estimateTextColor(img, { x: 0, y: 0, width: 4, height: 4 });

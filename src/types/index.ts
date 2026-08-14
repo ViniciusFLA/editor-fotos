@@ -69,6 +69,7 @@ export type TextMask = z.infer<typeof TextMaskSchema>;
 export const DetectedTextRegionStatusSchema = z.enum([
   'detected',
   'armed',
+  'transformed',
   'converted',
   'rejected',
 ]);
@@ -95,6 +96,15 @@ export const DetectedTextRegionSchema = z.object({
     .optional(),
   status: DetectedTextRegionStatusSchema,
   textLayerId: z.string().optional(),
+  proxyTransform: z
+    .object({
+      x: z.number(),
+      y: z.number(),
+      scaleX: z.number(),
+      scaleY: z.number(),
+      rotation: z.number(),
+    })
+    .optional(),
 });
 
 export type DetectedTextRegion = z.infer<typeof DetectedTextRegionSchema>;
