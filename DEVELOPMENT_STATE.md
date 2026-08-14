@@ -42,6 +42,7 @@
 **ETAPA 36.4 — OCR Text Style Estimation** — CONCLUIDA
 **CHECKPOINT 36.5 — Preserve Original Text Until Edit** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
 **CHECKPOINT 36.5F — Pixel-Perfect Raster Text Proxy Editing** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+**CHECKPOINT 36.5G — Reset / Re-Detect Text** — IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
 **ETAPA 37 — Segmentation Provider** — PROVIDER ABSTRACTION COMPLETED — REAL PROVIDER DEFERRED
 
 **Próxima etapa:** ETAPA 38 — Magic Select
@@ -376,6 +377,42 @@ Detected text
 **Color regression:** FIXED
 
 **Regra:** cor estimada válida NÃO é descartada apenas porque `confidence < 0.6`.
+
+**Manual validation:** AWAITING USER
+
+**ETAPA 39:** NOT STARTED
+
+### CHECKPOINT 36.5G — Reset / Re-Detect Text
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER MANUAL VALIDATION
+
+**Commit (funcional):** `874f463` — fix: allow clearing and rerunning text detection
+
+**Commit (documental):** commit separado de docs (DEVELOPMENT_STATE.md) após o deploy
+
+**Production:** https://editor-fotos-jet.vercel.app (deploy production READY, contém `874f463`)
+
+**Build/Validation:** TypeScript PASS, ESLint PASS, Vitest 109/109 PASS, Playwright 12/12 PASS, Build PASS.
+
+**Root cause:** após a detecção, clicar numa região armava um RasterProxy cuja seleção ficava presa num `base.id` inexistente no store → `hasSingleImageSelected` ficava `false` e o botão permanecia "Selecione uma imagem...", sem caminho para cancelar ou re-detectar.
+
+**Clear detection ("Limpar detecção"):**
+- remove apenas estado temporário de OCR: `detectedTexts`, `selectedDetectedRegionId`, `pendingEditRegionId`, `armedElement`/`armedRegionId`, `ocrStatus`→idle, `ocrDetectedCount`→0
+- raster (src), máscaras e TextElements NUNCA são tocados (não-destrutivo)
+- overlays removidos do canvas e seleção normal da imagem restaurada (`clearDetections` em `editor-store.ts`)
+
+**Re-detect ("Detectar novamente"):**
+- substitui as detecções anteriores (sem acumulação, sem IDs stale — `storeDetections` replace + `setOcrSuccess` limpa região selecionada)
+- `renderDetectedOverlays()` explícito pós-sucesso (mesmo `region.id`/status não muda `detectedOverlayKey`)
+- não altera o raster
+
+**Proteção de regiões converted/transformed:**
+- `clearDetections` recusa silenciosamente; re-detect bloqueado (`hasProtectedRegions` → `alreadyProcessed`); `clearArmedRegion` só reseta status `armed`
+- nenhuma edição do usuário pode ser perdida silenciosamente
+
+**Regressões 36.5F preservadas:** RasterProxy (arm/move/resize/rotate permanecem raster, sem IText), color preservation (amarelo + fontSize), text content edit (outros estilos preservados), FabricImage geometry, Undo/Redo, Save/Load, Export.
+
+**Playwright timeout 60s→120s:** apenas cold-start do Next dev sob workers paralelos (fluxo real mede ~7s warm). Sem mascaramento de falha.
 
 **Manual validation:** AWAITING USER
 
