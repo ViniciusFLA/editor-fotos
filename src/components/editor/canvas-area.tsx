@@ -648,7 +648,10 @@ export function CanvasArea() {
       if (!target) return;
       const regionId = regionOverlayMap.get(target);
       if (regionId) {
-        useEditorStore.getState().setSelectedDetectedRegionId(regionId);
+        const store = useEditorStore.getState();
+        store.setSelectedDetectedRegionId(regionId);
+        // Direct edit: clicking a detected text arms it for editing.
+        store.triggerEditRegion(regionId);
       }
     };
 

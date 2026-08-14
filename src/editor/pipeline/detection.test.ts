@@ -365,3 +365,50 @@ describe('store: detection does not alter image (CHECKPOINT 36.5)', () => {
     expect(state.armedElement).toBeNull();
   });
 });
+
+describe('style preservation (CHECKPOINT 36.5E)', () => {
+  function yellowArmed(): TextElement {
+    return {
+      id: 'armed-id', type: 'text', name: 'Text', x: 372, y: 477, width: 300, height: 120,
+      scaleX: 1, scaleY: 1, rotation: 0, opacity: 0, visible: true, locked: false, zIndex: 5,
+      text: '200%', fontFamily: 'Arial', fontSize: 93, fontWeight: 'bold', fontStyle: 'normal',
+      textAlign: 'left', fill: '#e0e020', letterSpacing: 0, lineHeight: 1.2,
+    };
+  }
+
+  it('fontSize change preserves color, text and position', () => {
+    useEditorStore.setState({ armedElement: yellowArmed(), armedRegionId: 'r1' });
+
+    useEditorStore.getState().updateArmedElement({ fontSize: 70 });
+
+    const armed = useEditorStore.getState().armedElement!;
+    expect(armed.fontSize).toBe(70);
+    expect(armed.fill).toBe('#e0e020');
+    expect(armed.text).toBe('200%');
+    expect(armed.x).toBe(372);
+    expect(armed.y).toBe(477);
+    expect(armed.fontWeight).toBe('bold');
+  });
+
+  it('color change preserves fontSize and text', () => {
+    useEditorStore.setState({ armedElement: yellowArmed(), armedRegionId: 'r1' });
+
+    useEditorStore.getState().updateArmedElement({ fill: '#ff0000' });
+
+    const armed = useEditorStore.getState().armedElement!;
+    expect(armed.fill).toBe('#ff0000');
+    expect(armed.fontSize).toBe(93);
+    expect(armed.text).toBe('200%');
+  });
+
+  it('content change preserves color and size', () => {
+    useEditorStore.setState({ armedElement: yellowArmed(), armedRegionId: 'r1' });
+
+    useEditorStore.getState().updateArmedElement({ text: '150%' });
+
+    const armed = useEditorStore.getState().armedElement!;
+    expect(armed.text).toBe('150%');
+    expect(armed.fill).toBe('#e0e020');
+    expect(armed.fontSize).toBe(93);
+  });
+});

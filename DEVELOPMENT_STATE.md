@@ -333,6 +333,18 @@ Pré-visualização/revisão dos elementos detectados (textos, logos, pessoas, p
 
 **Tests:** Vitest 86/86, Playwright 4/4 (raster unchanged no detect; overlay click sem crash; Editar texto preserva raster até a primeira edição).
 
+### CHECKPOINT 36.5E — Direct Text Edit + Property-Preserving Conversion
+
+**Status:** IMPLEMENTED + DEPLOYED — AWAITING USER VALIDATION
+
+**UX:** removida a caixa/lista grande de resultados OCR. Após "Detectar texto" restam apenas "N textos detectados" + "Converter todos". Clicar diretamente em um texto detectado (overlay) entra em `armed` imediatamente e o RightPanel mostra as propriedades normais de texto.
+
+**Style preservation:** a conversão usa `armedElement` (snapshot do estilo estimado) + patch granular. `updateArmedElement` aplica `{ ...armedElement, ...updates }`, então alterar só `fontSize` preserva cor/texto/posição/weight. A IText transitória recebe `fill = styleEstimate.color` quando há estimativa válida (nunca DEFAULT_TEXT_COLOR se existir estimativa). `convertArmedElement` reconstrói a partir do `armedElement` (não de defaults) e re-lê o estado mais recente após o inpainting.
+
+**Direct edit:** overlay click → `setSelectedDetectedRegionId` + `triggerEditRegion` (arma direto). RightPanel monta read-only (sem mutação); cada input envia só a própria propriedade.
+
+**Tests:** Vitest 89/89 (+3 style preservation), Playwright 4/4 (direct edit abre propriedades; raster preservado até a primeira edição real).
+
 ### CHECKPOINT 33.1 — Production Validation
 
 **Status:** DEPLOYED — AWAITING MANUAL UI VALIDATION

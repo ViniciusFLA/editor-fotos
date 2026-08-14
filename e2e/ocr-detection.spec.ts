@@ -92,7 +92,7 @@ test('Detectar texto preserves the raster (no visual change)', async ({ page }) 
   await expect(page.getByRole('button', { name: 'Converter todos' })).toBeVisible();
 });
 
-test('clicking a detected region selects it without crashing', async ({ page }) => {
+test('clicking a detected region opens text properties without crashing', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
 
@@ -125,21 +125,15 @@ test('clicking a detected region selects it without crashing', async ({ page }) 
   const ox = box!.x + 372 * scale;
   const oy = box!.y + 295 * scale;
   await page.mouse.click(ox, oy);
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(700);
 
   expect(pageErrors, `page crashed: ${pageErrors.join('; ')}`).toEqual([]);
 
-  // The region panel appears with the "Editar texto" action.
-  await expect(page.getByRole('button', { name: 'Editar texto' })).toBeVisible();
-  await expect(page.getByText('CONFIRA')).toBeVisible();
-
-  // The image raster is still intact (no conversion happened on click).
-  const after = await canvasPixels(page);
-  // (raster unchanged: already covered by the previous test)
-  expect(after.length).toBeGreaterThan(0);
+  // The right panel shows the detected text properties.
+  await expect(page.locator('aside textarea')).toHaveValue('CONFIRA');
 });
 
-test('Editar texto preserves the raster until the first real edit', async ({ page }) => {
+test('direct edit preserves the raster until the first real edit', async ({ page }) => {
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
 
@@ -167,16 +161,11 @@ test('Editar texto preserves the raster until the first real edit', async ({ pag
   await page.getByText(/textos detectados/).waitFor({ timeout: 15000 });
   await page.waitForTimeout(400);
 
-  // Select the detected region.
-  const scale = box!.width / 1080;
-  await page.mouse.click(box!.x + 372 * scale, box!.y + 295 * scale);
-  await page.waitForTimeout(400);
-  await expect(page.getByRole('button', { name: 'Editar texto' })).toBeVisible();
-
   const before = await canvasPixels(page);
 
-  // Arm for edit (opacity-0 IText) — raster must stay visually identical.
-  await page.getByRole('button', { name: 'Editar texto' }).click();
+  // Click the detected region — arms for edit (opacity-0 IText).
+  const scale = box!.width / 1080;
+  await page.mouse.click(box!.x + 372 * scale, box!.y + 295 * scale);
   await page.waitForTimeout(700);
 
   const armed = await canvasPixels(page);
@@ -193,7 +182,6 @@ test('Editar texto preserves the raster until the first real edit', async ({ pag
 
   expect(pageErrors, `page crashed on convert: ${pageErrors.join('; ')}`).toEqual([]);
   const converted = await canvasPixels(page);
-  // The region raster changed (original text masked/inpainted + IText shown).
   const convertedDiff = changedPixels(armed, converted);
   expect(convertedDiff).toBeGreaterThan(0);
 });
